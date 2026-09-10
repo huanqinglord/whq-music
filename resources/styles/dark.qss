@@ -1,0 +1,822 @@
+QMainWindow {
+    background-color: #0b0d14;
+    color: #f4f5fb;
+}
+
+#appSurface {
+    background-color: transparent;
+}
+
+QWidget {
+    color: #e8eaf2;
+    font-size: 14px;
+}
+
+#titleBar {
+    min-height: 56px;
+    max-height: 56px;
+    background-color: transparent;
+    border: none;
+}
+
+#windowTitle {
+    color: #f4f5fb;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#captionButton,
+#closeCaptionButton {
+    min-width: 26px;
+    max-width: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    padding: 0;
+    background-color: transparent;
+    border-radius: 5px;
+}
+
+#captionButton:hover {
+    background-color: rgba(255, 255, 255, 28);
+}
+
+#closeCaptionButton:hover {
+    background-color: #c42b1c;
+}
+
+#settingsPreview {
+    min-height: 42px;
+    padding: 8px 12px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 16);
+    border: 1px solid rgba(255, 255, 255, 34);
+    border-radius: 8px;
+}
+
+#brandLabel {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+#pageTitle {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+#libraryPageTitle {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+#libraryHeader,
+#songsHeader {
+    background-color: transparent;
+}
+
+#songsHintButton,
+#refreshLibraryButton {
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0;
+    background-color: transparent;
+    border-radius: 6px;
+}
+
+#songsHintButton:hover,
+#refreshLibraryButton:hover {
+    background-color: rgba(255, 255, 255, 18);
+}
+
+#sectionLabel {
+    color: #f5f6ff;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#mutedLabel {
+    color: #8f94a8;
+    font-size: 12px;
+}
+
+#panel {
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#playerBar {
+    background-color: rgba(8, 10, 16, 68);
+    border-top: 1px solid rgba(255, 255, 255, 18);
+    border-radius: 0;
+}
+
+#nowPlayingPage,
+#contentStack {
+    background-color: transparent;
+}
+
+#libraryPage {
+    background-color: transparent;
+}
+
+#settingsPage {
+    background-color: transparent;
+}
+
+#settingsPanel {
+    background-color: transparent;
+    border: none;
+}
+
+#settingsPanel QLabel {
+    color: #f5f6ff;
+}
+
+#settingsFieldLabel {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#settingsSuccessMessage {
+    color: #79d99a;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+#settingsPage QComboBox,
+#settingsPage QLineEdit,
+#settingsPage QSpinBox {
+    min-height: 40px;
+    padding: 0 12px;
+    color: #ffffff;
+    background-color: rgba(18, 21, 31, 178);
+    border: 1px solid rgba(255, 255, 255, 58);
+    border-radius: 10px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+#settingsPage QComboBox:hover,
+#settingsPage QComboBox:focus,
+#settingsPage QLineEdit:focus,
+#settingsPage QSpinBox:hover,
+#settingsPage QSpinBox:focus {
+    color: #ffffff;
+    background-color: rgba(28, 32, 45, 218);
+    border-color: #8b7fff;
+}
+
+#settingsPage QComboBox::drop-down {
+    width: 34px;
+    border: none;
+}
+
+#settingsPage QSpinBox {
+    padding-right: 38px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+#settingsPage QSpinBox::up-button,
+#settingsPage QSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 30px;
+    color: #ffffff;
+    background-color: rgba(118, 103, 245, 105);
+    border: none;
+    border-left: 1px solid rgba(196, 190, 255, 120);
+}
+
+#settingsPage QSpinBox::up-button {
+    subcontrol-position: top right;
+    border-bottom: 1px solid rgba(196, 190, 255, 80);
+    border-top-right-radius: 9px;
+}
+
+#settingsPage QSpinBox::down-button {
+    subcontrol-position: bottom right;
+    border-bottom-right-radius: 9px;
+}
+
+#settingsPage QSpinBox::up-button:hover,
+#settingsPage QSpinBox::down-button:hover {
+    background-color: #7667f5;
+}
+
+#settingsPage QSpinBox::up-button:pressed,
+#settingsPage QSpinBox::down-button:pressed {
+    background-color: #5549bd;
+}
+
+#settingsPage QComboBox QAbstractItemView {
+    color: #f5f6ff;
+    background-color: #1b1f2c;
+    border: 1px solid #4b536d;
+    border-radius: 8px;
+    outline: none;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+#settingsPage #ghostButton {
+    min-width: 96px;
+    max-width: 120px;
+    color: #f5f6ff;
+    background-color: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 34);
+}
+
+#settingsPage #ghostButton:hover {
+    background-color: rgba(255, 255, 255, 24);
+    border-color: rgba(139, 127, 255, 130);
+}
+
+#songInfoPanel,
+#lyricsPanel {
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#lyricsScriptButton {
+    min-width: 42px;
+    max-width: 42px;
+    min-height: 34px;
+    max-height: 34px;
+    padding: 0;
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#lyricsScriptButton:hover {
+    background-color: transparent;
+    border: none;
+}
+
+#coverArt {
+    color: #9287ff;
+    background-color: rgba(118, 103, 245, 28);
+    border: none;
+    border-radius: 22px;
+    font-size: 88px;
+}
+
+#detailTitle {
+    color: #ffffff;
+    font-size: 23px;
+    font-weight: 700;
+}
+
+#detailArtist {
+    color: #bdc1d3;
+    font-size: 15px;
+}
+
+#lyricsList {
+    padding: 120px 24px;
+    background-color: transparent;
+    border: none;
+    font-size: 18px;
+}
+
+#lyricsList::item {
+    background-color: transparent;
+}
+
+#lyricsList::item[data="true"] {
+    background-color: transparent;
+}
+
+#libraryButton {
+    color: #c9c5ff;
+    background-color: rgba(118, 103, 245, 28);
+    border-color: rgba(139, 127, 255, 75);
+}
+
+#playerBar {
+    min-height: 112px;
+}
+
+#modeButton,
+#volumeButton,
+#queueButton,
+#audioEffectButton {
+    min-width: 40px;
+    max-width: 40px;
+    padding: 0;
+}
+
+#libraryButton,
+#audioEffectButton,
+#modeButton,
+#volumeButton,
+#queueButton {
+    color: #dfe2f1;
+    background-color: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 22);
+    border-radius: 10px;
+}
+
+#libraryButton:hover,
+#audioEffectButton:hover,
+#modeButton:hover,
+#volumeButton:hover,
+#queueButton:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 28);
+    border-color: rgba(255, 255, 255, 38);
+}
+
+#libraryButton:pressed,
+#audioEffectButton:pressed,
+#modeButton:pressed,
+#volumeButton:pressed,
+#queueButton:pressed {
+    background-color: rgba(255, 255, 255, 17);
+    border-color: rgba(255, 255, 255, 28);
+}
+
+#queueDrawer {
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#queueDrawer #sectionLabel {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+#queueDrawer #queueList {
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#queueDrawer #queueList::item,
+#queueDrawer #queueList::item:hover,
+#queueDrawer #queueList::item:selected {
+    padding: 0 12px 0 0;
+    color: #eef0f7;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+#queueDrawer #queueList::item:hover {
+    background-color: rgba(255, 255, 255, 22);
+}
+
+QPushButton {
+    min-height: 36px;
+    padding: 0 14px;
+    color: #dfe2f1;
+    background-color: rgba(35, 39, 55, 175);
+    border: none;
+    border-radius: 10px;
+}
+
+QPushButton:hover {
+    color: #ffffff;
+    background-color: #30364b;
+}
+
+QPushButton:pressed {
+    background-color: #1a1d2a;
+}
+
+#primaryButton,
+#playButton {
+    color: #ffffff;
+    background-color: #7667f5;
+    font-weight: 600;
+}
+
+#primaryButton:hover,
+#playButton:hover {
+    background-color: #887aff;
+}
+
+#playButton {
+    min-width: 46px;
+    max-width: 46px;
+    min-height: 42px;
+    border-radius: 21px;
+}
+
+#ghostButton,
+#sidebarButton {
+    background-color: transparent;
+}
+
+#groupNameButton,
+#groupMenuButton,
+#newGroupButton {
+    min-height: 34px;
+    padding: 0 8px;
+    background-color: transparent;
+    border: none;
+}
+
+#groupNameButton,
+#newGroupButton {
+    text-align: left;
+}
+
+#ghostButton,
+#libraryButton,
+#groupMenuButton {
+    min-width: 40px;
+    max-width: 40px;
+    padding: 0;
+}
+
+#newGroupButton {
+    padding: 0 12px;
+}
+
+#groupEditor {
+    min-height: 34px;
+    padding: 0 10px;
+    color: #ffffff;
+    background-color: rgba(35, 39, 55, 175);
+    border: none;
+    border-radius: 0;
+}
+
+#groupEditorError {
+    padding: 4px 8px;
+    color: #ffb4ab;
+    background-color: rgba(64, 24, 28, 235);
+    border: 1px solid rgba(255, 180, 171, 90);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+#songSearchEditor {
+    min-height: 36px;
+    max-width: 230px;
+    padding: 0 12px;
+    color: #ffffff;
+    background-color: rgba(35, 39, 55, 175);
+    border: 1px solid rgba(139, 127, 255, 45);
+    border-radius: 10px;
+    selection-background-color: #7667f5;
+}
+
+#songSearchEditor:focus {
+    border-color: rgba(139, 127, 255, 150);
+    background-color: rgba(43, 47, 66, 205);
+}
+
+QInputDialog QLineEdit {
+    min-height: 36px;
+    padding: 0 12px;
+    color: #ffffff;
+    background-color: rgba(35, 39, 55, 235);
+    border: 1px solid rgba(139, 127, 255, 80);
+    border-radius: 10px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+QInputDialog QLineEdit:focus {
+    color: #ffffff;
+    border-color: rgba(139, 127, 255, 180);
+    background-color: rgba(43, 47, 66, 245);
+}
+
+QDialog,
+QMessageBox,
+QInputDialog,
+QFileDialog {
+    color: #e8eaf2;
+    background-color: #141722;
+}
+
+QDialog {
+    border: 1px solid #30364b;
+}
+
+QDialog QLabel,
+QMessageBox QLabel,
+QInputDialog QLabel,
+QFileDialog QLabel {
+    color: #e8eaf2;
+    background-color: transparent;
+}
+
+QDialog QLineEdit,
+QDialog QComboBox,
+QDialog QSpinBox,
+QDialog QPlainTextEdit {
+    min-height: 34px;
+    padding: 0 10px;
+    color: #f4f5fb;
+    background-color: #1c202d;
+    border: 1px solid #383e52;
+    border-radius: 8px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+QDialog QPlainTextEdit {
+    padding: 10px;
+}
+
+QDialogButtonBox {
+    background-color: transparent;
+}
+
+QDialog QLineEdit:focus,
+QDialog QComboBox:focus,
+QDialog QSpinBox:focus,
+QDialog QPlainTextEdit:focus {
+    border-color: #8b7fff;
+    background-color: #222738;
+}
+
+#metadataDialog #metadataValueEditor,
+#metadataDialog #metadataTable {
+    color: #f4f5fb;
+    background-color: #1c202d;
+    border-color: #383e52;
+}
+
+#metadataDialog #metadataTable QLineEdit {
+    min-height: 0;
+    padding: 0 6px;
+    color: #f4f5fb;
+    background-color: #1c202d;
+    border: 1px solid #8b7fff;
+    border-radius: 0;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+#metadataDialog #metadataSummary {
+    color: #aeb3c7;
+}
+
+#groupMembershipDialog #groupMembershipSong {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+#groupMembershipDialog #groupMembershipCount,
+#groupMembershipDialog #groupMembershipEmpty {
+    color: #aeb3c7;
+}
+
+#groupMembershipDialog #groupMembershipList::item {
+    min-height: 38px;
+    padding: 0 8px;
+    border-radius: 0;
+}
+
+#groupMembershipDialog #groupMembershipList::indicator {
+    width: 18px;
+    height: 18px;
+    background-color: transparent;
+    border: 1px solid #656c82;
+    border-radius: 4px;
+}
+
+#groupMembershipDialog #groupMembershipList::indicator:hover {
+    border-color: #8b7fff;
+}
+
+#groupMembershipDialog #groupMembershipList::indicator:checked {
+    background-color: #7667f5;
+    border-color: #8b7fff;
+}
+
+#lyricsSelectionDialog #lyricsResultList,
+#lyricsSelectionDialog #lyricsPreview {
+    background-color: #1c202d;
+    border: 1px solid #383e52;
+    border-radius: 8px;
+}
+
+#lyricsSelectionDialog #dialogDescription {
+    color: #aeb3c7;
+}
+
+QDialog QPushButton#primaryDialogButton {
+    min-width: 88px;
+    color: #ffffff;
+    background-color: #7667f5;
+    border-color: #887aff;
+}
+
+QDialog QPushButton#primaryDialogButton:hover {
+    background-color: #887aff;
+}
+
+QDialog QPushButton#secondaryDialogButton {
+    min-width: 88px;
+    background-color: transparent;
+}
+
+QDialog QListWidget,
+QDialog QTableWidget,
+QFileDialog QTreeView,
+QFileDialog QListView {
+    color: #dfe2ee;
+    background-color: #10131d;
+    alternate-background-color: #181c28;
+    border: 1px solid #30364b;
+    border-radius: 8px;
+    outline: none;
+}
+
+QDialog QHeaderView,
+QFileDialog QHeaderView {
+    background-color: #10131d;
+}
+
+QDialog QHeaderView::section,
+QFileDialog QHeaderView::section {
+    color: #aeb3c7;
+    background-color: #1b1f2c;
+    border: none;
+}
+
+QDialog QDialogButtonBox QPushButton,
+QMessageBox QPushButton,
+QFileDialog QPushButton,
+QFileDialog QToolButton {
+    color: #f4f5fb;
+    background-color: #292e40;
+    border: 1px solid #3b4258;
+}
+
+QDialog QDialogButtonBox QPushButton:hover,
+QMessageBox QPushButton:hover,
+QFileDialog QPushButton:hover,
+QFileDialog QToolButton:hover {
+    background-color: #7667f5;
+    border-color: #8b7fff;
+}
+
+QFileDialog QComboBox QAbstractItemView,
+QInputDialog QComboBox QAbstractItemView {
+    color: #e8eaf2;
+    background-color: #1c202d;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+QListWidget,
+QTableView#songTable,
+QTableWidget {
+    color: #dfe2ee;
+    background-color: transparent;
+    alternate-background-color: rgba(255, 255, 255, 7);
+    border: none;
+    outline: none;
+}
+
+QListWidget::item {
+    min-height: 42px;
+    padding: 0 12px;
+    border-radius: 9px;
+}
+
+QListWidget#groupList::item {
+    padding: 0;
+    border-radius: 0;
+}
+
+QListWidget::item:hover {
+    background-color: rgba(255, 255, 255, 12);
+}
+
+QListWidget::item:selected,
+QTableWidget::item:selected {
+    color: #ffffff;
+    background-color: rgba(118, 103, 245, 90);
+}
+
+QTableView#songTable::item:selected,
+QTableView#songTable::item:selected:active,
+QTableView#songTable::item:selected:!active {
+    color: #dfe2ee;
+    background-color: rgba(0, 0, 0, 0);
+    border: none;
+    outline: none;
+}
+
+QHeaderView {
+    background-color: transparent;
+}
+
+QHeaderView::section {
+    min-height: 38px;
+    padding-left: 10px;
+    color: #8f94a8;
+    background-color: rgba(8, 10, 16, 105);
+    border: none;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+QTableCornerButton::section {
+    background-color: rgba(8, 10, 16, 105);
+    border: none;
+}
+
+QSlider::groove:horizontal {
+    height: 4px;
+    background-color: #34394b;
+    border-radius: 2px;
+}
+
+QSlider::sub-page:horizontal {
+    background-color: #8274ff;
+    border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+    width: 14px;
+    margin: -5px 0;
+    background-color: #ffffff;
+    border: 2px solid #8274ff;
+    border-radius: 7px;
+}
+
+QSlider::groove:vertical {
+    width: 4px;
+    background-color: #34394b;
+    border-radius: 2px;
+}
+
+QSlider::sub-page:vertical {
+    background-color: #34394b;
+    border-radius: 2px;
+}
+
+QSlider::add-page:vertical {
+    background-color: #8274ff;
+    border-radius: 2px;
+}
+
+QSlider::handle:vertical {
+    height: 14px;
+    margin: 0 -5px;
+    background-color: #ffffff;
+    border: 2px solid #8274ff;
+    border-radius: 7px;
+}
+
+QScrollBar:vertical {
+    width: 8px;
+    background: transparent;
+}
+
+QScrollBar::handle:vertical {
+    min-height: 30px;
+    background-color: #3b4053;
+    border-radius: 4px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QMenu {
+    padding: 6px;
+    color: #e8eaf2;
+    background-color: rgba(20, 23, 34, 235);
+    border: none;
+    border-radius: 8px;
+}
+
+QMenu#playerPopup {
+    padding: 0;
+}
+
+QMenu::item {
+    padding: 8px 24px;
+    border-radius: 6px;
+}
+
+QMenu::item:selected {
+    background-color: #7667f5;
+}
+
+QMenu#groupOperationMenu::item {
+    border-radius: 0;
+}

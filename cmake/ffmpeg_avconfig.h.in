@@ -1,0 +1,8 @@
+#ifndef AVUTIL_AVCONFIG_H
+#define AVUTIL_AVCONFIG_H
+
+/* Consumer-side configuration for the unmodified FFmpeg public headers. */
+#define AV_HAVE_BIGENDIAN @WHQ_FFMPEG_BIG_ENDIAN@
+#define AV_HAVE_FAST_UNALIGNED @WHQ_FFMPEG_FAST_UNALIGNED@
+
+#endif

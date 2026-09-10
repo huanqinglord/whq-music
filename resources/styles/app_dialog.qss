@@ -1,0 +1,213 @@
+QDialog[appDialog="true"] {
+    background: transparent;
+    border: none;
+}
+
+QDialog[appDialog="true"] QLabel {
+    color: #f4f5fb;
+    background: transparent;
+}
+
+QDialog[appDialog="true"] #appDialogTitle {
+    font-weight: 600;
+}
+
+QDialog[appDialog="true"] #appDialogTitleBar,
+QDialog[appDialog="true"] #metadataDetails {
+    background: transparent;
+    border: none;
+}
+
+QDialog[appDialog="true"] #metadataSummary,
+QDialog[appDialog="true"] #metadataFileSummary,
+QDialog[appDialog="true"] #metadataDetails QLabel,
+QDialog[appDialog="true"] #groupMembershipCount,
+QDialog[appDialog="true"] #groupMembershipEmpty,
+QDialog[appDialog="true"] #dialogDescription,
+QDialog[appDialog="true"] #lyricsStatus {
+    color: #bac0d2;
+}
+
+QDialog[appDialog="true"] #lyricsStatus[tone="error"] {
+    color: #ffb7b7;
+}
+
+QDialog[appDialog="true"] #lyricsStatus[tone="success"] {
+    color: #a5e3be;
+}
+
+QDialog[appDialog="true"] QLineEdit {
+    color: #f4f5fb;
+    background-color: rgba(255, 255, 255, 18);
+    border: 1px solid rgba(255, 255, 255, 40);
+    border-radius: 8px;
+    padding: 0 12px;
+    min-height: 36px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+QDialog[appDialog="true"] QLineEdit:focus {
+    color: #f4f5fb;
+    background-color: rgba(255, 255, 255, 24);
+    border-color: #9b90ff;
+}
+
+QDialog[appDialog="true"] QTableWidget,
+QDialog[appDialog="true"] QListWidget,
+QDialog[appDialog="true"] QPlainTextEdit {
+    color: #f4f5fb;
+    background-color: rgba(10, 13, 22, 65);
+    alternate-background-color: rgba(255, 255, 255, 7);
+    border: 1px solid rgba(255, 255, 255, 25);
+    border-radius: 8px;
+    selection-color: #ffffff;
+    selection-background-color: rgba(118, 103, 245, 90);
+    outline: none;
+}
+
+QDialog[appDialog="true"] QPlainTextEdit {
+    padding: 10px;
+}
+
+QDialog[appDialog="true"] QTableWidget::item {
+    padding: 4px 10px;
+    border: none;
+}
+
+QDialog[appDialog="true"] #lyricsResultTable::item:hover {
+    background-color: rgba(255, 255, 255, 18);
+}
+
+QDialog[appDialog="true"] #lyricsResultTable::item:selected {
+    color: #ffffff;
+    background-color: rgba(118, 103, 245, 90);
+}
+
+QDialog[appDialog="true"] QListWidget::item {
+    padding: 8px 10px;
+    min-height: 30px;
+    border: none;
+    border-radius: 0;
+}
+
+QDialog[appDialog="true"] QListWidget::item:hover {
+    background-color: rgba(255, 255, 255, 18);
+}
+
+QDialog[appDialog="true"] QListWidget::item:selected {
+    color: #ffffff;
+    background-color: rgba(118, 103, 245, 90);
+}
+
+QDialog[appDialog="true"] QListWidget::indicator {
+    width: 18px;
+    height: 18px;
+    background: transparent;
+    border: 1px solid #9298ad;
+    border-radius: 4px;
+}
+
+QDialog[appDialog="true"] QListWidget::indicator:checked {
+    image: url(:/icons/check.svg);
+    background-color: #7667f5;
+    border-color: #9b90ff;
+}
+
+QDialog[appDialog="true"] QListWidget::indicator:hover {
+    border-color: #b8b0ff;
+}
+
+QDialog[appDialog="true"] QHeaderView,
+QDialog[appDialog="true"] QHeaderView::section {
+    color: #bac0d2;
+    background-color: #252736;
+    border: none;
+    padding: 8px 10px;
+}
+
+QDialog[appDialog="true"] QTableWidget QLineEdit {
+    color: #ffffff;
+    background-color: #303247;
+    border: 1px solid #9b90ff;
+    border-radius: 4px;
+    min-height: 0;
+    padding: 0 9px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+QDialog[appDialog="true"] QPushButton#primaryDialogButton {
+    color: #ffffff;
+    background-color: #7667f5;
+    border: 1px solid #887aff;
+    border-radius: 8px;
+    min-width: 76px;
+    min-height: 36px;
+}
+
+QDialog[appDialog="true"] QPushButton#primaryDialogButton:hover {
+    background-color: #887aff;
+}
+
+QDialog[appDialog="true"] QPushButton#primaryDialogButton:pressed {
+    background-color: #6555df;
+}
+
+QDialog[appDialog="true"] QPushButton#secondaryDialogButton {
+    color: #e8eaf2;
+    background-color: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 35);
+    border-radius: 8px;
+    min-width: 76px;
+    min-height: 36px;
+}
+
+QDialog[appDialog="true"] QPushButton#secondaryDialogButton:hover {
+    background-color: rgba(255, 255, 255, 28);
+}
+
+QDialog[appDialog="true"] QPushButton#secondaryDialogButton:pressed {
+    background-color: rgba(255, 255, 255, 40);
+}
+
+QDialog[appDialog="true"] QPushButton#primaryDialogButton:disabled,
+QDialog[appDialog="true"] QPushButton#secondaryDialogButton:disabled {
+    color: #9399af;
+    background-color: rgba(255, 255, 255, 10);
+    border-color: rgba(255, 255, 255, 20);
+}
+
+QDialog[appDialog="true"] QPushButton#metadataDetailsToggle {
+    color: #bac0d2;
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-height: 28px;
+    text-align: left;
+}
+
+QDialog[appDialog="true"] QPushButton#metadataDetailsToggle:hover {
+    color: #ffffff;
+}
+
+QDialog[appDialog="true"] QPushButton#appDialogCloseButton {
+    min-width: 26px;
+    max-width: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+}
+
+QDialog[appDialog="true"] QPushButton#appDialogCloseButton:hover {
+    background-color: #c42b1c;
+}
+
+QDialog[appDialog="true"] #lyricsOverwritePanel {
+    background-color: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 35);
+    border-radius: 8px;
+}
