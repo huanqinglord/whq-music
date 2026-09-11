@@ -9,13 +9,60 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QStyleOptionViewItem>
 #include <QStyledItemDelegate>
+#include <QTextLayout>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace PlayerWidgets {
+
+LyricsListWidget::LyricsListWidget(QWidget *parent) : QListWidget(parent)
+{
+    setUniformItemSizes(true);
+    setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
+void LyricsListWidget::updateGeometries()
+{
+    const int previousPosition = verticalScrollBar()->value();
+    QListWidget::updateGeometries();
+    if (count() == 0) {
+        return;
+    }
+
+    const QRect firstRect = visualItemRect(item(0));
+    const QRect lastRect = visualItemRect(item(count() - 1));
+    if (!firstRect.isValid() || !lastRect.isValid()) {
+        return;
+    }
+    const int offset = verticalScrollBar()->value();
+    const int center = viewport()->rect().center().y();
+    // 允许首行上方和末行下方留白，避免居中位置被默认的内容边界截断。
+    const int minimum = firstRect.center().y() + offset - center;
+    const int maximum = lastRect.center().y() + offset - center;
+    verticalScrollBar()->setRange(minimum, qMax(minimum, maximum));
+    verticalScrollBar()->setValue(previousPosition);
+}
+
+void LyricsListWidget::scrollTo(const QModelIndex &index, ScrollHint hint)
+{
+    if (hint != QAbstractItemView::PositionAtCenter || !index.isValid()) {
+        QListWidget::scrollTo(index, hint);
+        return;
+    }
+    // 只处理尚未完成的布局；固定行高后，正常换句无需强制重排整张列表。
+    executeDelayedItemsLayout();
+    const QRect area = visualRect(index);
+    if (area.isValid()) {
+        verticalScrollBar()->setValue(verticalScrollBar()->value() + area.center().y() -
+                                      viewport()->rect().center().y());
+    }
+}
 
 LyricsItemDelegate::LyricsItemDelegate(QObject *parent) : QStyledItemDelegate(parent)
 {
@@ -30,6 +77,104 @@ bool LyricsItemDelegate::setScrollProgress(qreal progress)
     }
     m_scrollProgress = bounded;
     return true;
+}
+
+bool LyricsItemDelegate::setFillProgress(qreal progress)
+{
+    const qreal bounded = qBound(0.0, progress, 1.0);
+    if (qFuzzyCompare(m_fillProgress + 1.0, bounded + 1.0)) {
+        return false;
+    }
+    m_fillProgress = bounded;
+    return true;
+}
+
+qreal LyricsItemDelegate::wordFillProgress(const Lyrics::Line &line, qint64 position) const
+{
+    const auto *lyrics = qobject_cast<const QListWidget *>(parent());
+    if (lyrics == nullptr || line.words.isEmpty()) {
+        return 0.0;
+    }
+    QFont font = lyrics->font();
+    font.setBold(true);
+    if (font.pixelSize() > 0) {
+        font.setPixelSize(qRound(font.pixelSize() * 1.35));
+    } else {
+        font.setPointSizeF(font.pointSizeF() * 1.35);
+    }
+    const QString key = font.toString() + QLatin1Char('\n') + line.text;
+    const WordLayout *cached = m_wordLayouts.object(key);
+    if (cached == nullptr) {
+        QTextLayout layout(line.text, font);
+        layout.beginLayout();
+        QTextLine shapedLine = layout.createLine();
+        if (!shapedLine.isValid()) {
+            layout.endLayout();
+            return 0.0;
+        }
+        shapedLine.setLineWidth(qMax(1.0, QFontMetricsF(font).horizontalAdvance(line.text) + 1.0));
+        layout.endLayout();
+        auto *prepared = new WordLayout;
+        prepared->cursorPositions.reserve(line.text.size() + 1);
+        for (int cursor = 0; cursor <= line.text.size(); ++cursor) {
+            prepared->cursorPositions.append(shapedLine.cursorToX(cursor));
+        }
+        prepared->textBounds = textOutline(line.text, font).boundingRect();
+        m_wordLayouts.insert(key, prepared);
+        cached = prepared;
+    }
+    if (cached->textBounds.width() <= 0.0 || position < line.words.first().startMs) {
+        return 0.0;
+    }
+    if (position >= line.words.last().endMs) {
+        return 1.0;
+    }
+    qreal filledX = cached->textBounds.left();
+    for (const Lyrics::Word &word : line.words) {
+        const int endCursor = word.textStart + word.textLength;
+        if (word.textStart < 0 || endCursor >= cached->cursorPositions.size()) {
+            continue;
+        }
+        if (position < word.startMs) {
+            break;
+        }
+        const qreal startX = cached->cursorPositions.at(word.textStart);
+        const qreal endX = cached->cursorPositions.at(endCursor);
+        if (position >= word.endMs) {
+            filledX = endX;
+            continue;
+        }
+        // 字间停顿保持已填部分，拖音在该字实际排版宽度内缓慢推进。
+        const qreal progress = static_cast<qreal>(position - word.startMs) /
+                               qMax(qint64(1), word.endMs - word.startMs);
+        filledX = startX + (endX - startX) * progress;
+        break;
+    }
+    return qBound(0.0, (filledX - cached->textBounds.left()) / cached->textBounds.width(), 1.0);
+}
+
+void LyricsItemDelegate::prepareLine(const Lyrics::Line &line) const
+{
+    const auto *lyrics = qobject_cast<const QListWidget *>(parent());
+    if (lyrics == nullptr) {
+        return;
+    }
+    QFont font = lyrics->font();
+    font.setBold(false);
+    const QString text = line.text.isEmpty() ? QStringLiteral("···") : line.text;
+    const QString inactiveText = QFontMetrics(font).elidedText(
+        text, Qt::ElideRight, qMax(0, lyrics->viewport()->width() - 32));
+    textOutline(inactiveText, font);
+    font.setBold(true);
+    if (font.pixelSize() > 0) {
+        font.setPixelSize(qRound(font.pixelSize() * 1.35));
+    } else {
+        font.setPointSizeF(font.pointSizeF() * 1.35);
+    }
+    textOutline(text, font);
+    if (!line.words.isEmpty()) {
+        wordFillProgress(line, line.startMs);
+    }
 }
 
 QPainterPath LyricsItemDelegate::textOutline(const QString &text, const QFont &font) const
@@ -75,6 +220,7 @@ void LyricsItemDelegate::setBackground(const QString &path)
     m_background = backgroundSample(path);
     m_sampledBackground = {};
     m_sampledSurfaceSize = {};
+    m_activeColors.clear();
 
     QImage image = m_background;
     if (image.isNull()) {
@@ -168,30 +314,20 @@ void LyricsItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
     // Move the painter, keeping the cached outline shared rather than copying its elements.
     painter->translate(origin);
 
-    const qreal localLuminance = backgroundLuminance(option.rect);
-    const bool locallyDark = localLuminance < 0.52;
     if (active) {
-        const QColor outline = locallyDark ? QColor(5, 7, 12, 180) : QColor(255, 255, 255, 175);
-        painter->strokePath(textPath,
-                            QPen(outline, 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    }
-
-    if (active) {
-        const QList<QColor> adaptiveColors = locallyDark
-                                                 ? QList<QColor>{QColor(QStringLiteral("#fff176")),
-                                                                 QColor(QStringLiteral("#72e6ff")),
-                                                                 QColor(QStringLiteral("#ff91d0"))}
-                                                 : QList<QColor>{QColor(QStringLiteral("#5b21b6")),
-                                                                 QColor(QStringLiteral("#075985")),
-                                                                 QColor(QStringLiteral("#9d174d"))};
-        QLinearGradient gradient(QPointF(option.rect.topLeft()) - origin,
-                                 QPointF(option.rect.topRight()) - origin);
-        for (int i = 0; i < adaptiveColors.size(); ++i) {
-            gradient.setColorAt(static_cast<qreal>(i) / (adaptiveColors.size() - 1),
-                                adaptiveColors.at(i));
+        const QList<QColor> colors = activeLyricsColors(font);
+        painter->fillPath(textPath, colors.at(0));
+        if (m_fillProgress > 0.0) {
+            // 按完整字形宽度填色，裁剪与横向滚动共用坐标，不能按可见部分重新计算进度。
+            painter->save();
+            const QRectF filledArea(bounds.left(), bounds.top() - 1.0,
+                                     bounds.width() * m_fillProgress, bounds.height() + 2.0);
+            painter->setClipRect(filledArea, Qt::IntersectClip);
+            painter->fillPath(textPath, colors.at(1));
+            painter->restore();
         }
-        painter->fillPath(textPath, gradient);
     } else {
+        const bool locallyDark = backgroundLuminance(textArea.toAlignedRect()) < 0.52;
         painter->fillPath(textPath,
                           locallyDark ? QColor(248, 249, 255, 225) : QColor(17, 19, 27, 225));
     }
@@ -199,20 +335,24 @@ void LyricsItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &op
 }
 
 QSize LyricsItemDelegate::sizeHint(const QStyleOptionViewItem &option,
-                                   const QModelIndex &index) const
+                                   const QModelIndex &) const
 {
-    QSize size = QStyledItemDelegate::sizeHint(option, index);
-    // 行宽由视口决定，长歌词只在当前行内部移动。
-    size.setWidth(1);
-    size.setHeight(index.data(Qt::UserRole + 1).toBool() ? 68 : 48);
-    return size;
+    QFont font = option.font;
+    font.setBold(true);
+    if (font.pixelSize() > 0) {
+        font.setPixelSize(qRound(font.pixelSize() * 1.35));
+    } else {
+        font.setPointSizeF(font.pointSizeF() * 1.35);
+    }
+    // 所有行都为高亮字号预留空间，换句只改变绘制，不改变行高和后续行的位置。
+    return QSize(1, qMax(68, QFontMetrics(font).height() + 12));
 }
 
-qreal LyricsItemDelegate::backgroundLuminance(const QRect &itemRect) const
+QRect LyricsItemDelegate::backgroundSampleRect(const QRect &itemRect) const
 {
     const auto *lyrics = qobject_cast<const QListWidget *>(parent());
     if (lyrics == nullptr || m_background.isNull()) {
-        return m_darkBackground ? 0.2 : 0.8;
+        return {};
     }
 
     const QWidget *surface = lyrics;
@@ -221,7 +361,7 @@ qreal LyricsItemDelegate::backgroundLuminance(const QRect &itemRect) const
         surface = surface->parentWidget();
     }
     if (surface->objectName() != QStringLiteral("appSurface") || surface->size().isEmpty()) {
-        return m_darkBackground ? 0.2 : 0.8;
+        return {};
     }
 
     if (m_sampledBackground.isNull() || m_sampledSurfaceSize != surface->size()) {
@@ -236,14 +376,22 @@ qreal LyricsItemDelegate::backgroundLuminance(const QRect &itemRect) const
         samplePainter.drawImage(origin, scaled);
         m_sampledBackground = canvas;
         m_sampledSurfaceSize = surface->size();
+        m_activeColors.clear();
     }
 
     const QPoint surfacePosition =
         lyrics->viewport()->mapTo(const_cast<QWidget *>(surface), itemRect.topLeft());
-    QRect sampleRect(qRound(surfacePosition.x() / 8.0), qRound(surfacePosition.y() / 8.0),
-                     qMax(1, qRound(itemRect.width() / 8.0)),
-                     qMax(1, qRound(itemRect.height() / 8.0)));
-    sampleRect = sampleRect.intersected(m_sampledBackground.rect());
+    const qreal scaleX = static_cast<qreal>(m_sampledBackground.width()) / surface->width();
+    const qreal scaleY = static_cast<qreal>(m_sampledBackground.height()) / surface->height();
+    const QRect sampleRect = QRectF(surfacePosition.x() * scaleX, surfacePosition.y() * scaleY,
+                                    itemRect.width() * scaleX, itemRect.height() * scaleY)
+                                 .toAlignedRect();
+    return sampleRect.intersected(m_sampledBackground.rect());
+}
+
+qreal LyricsItemDelegate::backgroundLuminance(const QRect &itemRect) const
+{
+    const QRect sampleRect = backgroundSampleRect(itemRect);
     if (sampleRect.isEmpty()) {
         return m_darkBackground ? 0.2 : 0.8;
     }
@@ -258,6 +406,65 @@ qreal LyricsItemDelegate::backgroundLuminance(const QRect &itemRect) const
         }
     }
     return samples > 0 ? luminance / samples : (m_darkBackground ? 0.2 : 0.8);
+}
+
+QList<QColor> LyricsItemDelegate::activeLyricsColors(const QFont &font) const
+{
+    const auto *lyrics = qobject_cast<const QListWidget *>(parent());
+    QRect band(0, 0, 1, 1);
+    if (lyrics != nullptr) {
+        band = lyrics->viewport()->rect().adjusted(16, 0, -16, 0);
+        const int textHeight = qMax(68, QFontMetrics(font).height() + 8);
+        band.setTop(lyrics->viewport()->rect().center().y() - textHeight / 2);
+        band.setHeight(textHeight);
+        band.setWidth(qMax(1, band.width()));
+    }
+    const QRect sampleRect = backgroundSampleRect(band);
+    const QString fontKey = font.toString();
+    if (m_activeColors.isEmpty() || m_activeSampleRect != sampleRect ||
+        m_activeFontKey != fontKey || m_activeBandSize != band.size()) {
+        const auto luminance = [](const QColor &color) {
+            const auto linear = [](qreal channel) {
+                return channel <= 0.04045 ? channel / 12.92
+                                          : std::pow((channel + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
+                   0.0722 * linear(color.blueF());
+        };
+        qreal totalLuminance = 0.0;
+        int samples = 0;
+        for (int y = sampleRect.top(); y <= sampleRect.bottom(); ++y) {
+            for (int x = sampleRect.left(); x <= sampleRect.right(); ++x) {
+                totalLuminance += luminance(m_sampledBackground.pixelColor(x, y));
+                ++samples;
+            }
+        }
+        const qreal background = samples > 0 ? totalLuminance / samples
+                                             : luminance(QColor(QStringLiteral("#0b0d14")));
+        // 整句使用统一底色和高亮色，以色相差异明确区分填色前后，并兼顾背景对比度。
+        const QList<QList<QColor>> palettes = {
+            {QColor(QStringLiteral("#edf0f7")), QColor(QStringLiteral("#76dcff"))},
+            {QColor(QStringLiteral("#303746")), QColor(QStringLiteral("#6326ad"))}};
+        qreal bestContrast = -1.0;
+        for (const auto &palette : palettes) {
+            qreal minimumContrast = 21.0;
+            for (const QColor &color : palette) {
+                const qreal text = luminance(color);
+                const qreal contrast = (qMax(background, text) + 0.05) /
+                                       (qMin(background, text) + 0.05);
+                minimumContrast = qMin(minimumContrast, contrast);
+            }
+            if (minimumContrast > bestContrast) {
+                bestContrast = minimumContrast;
+                m_activeColors = palette;
+            }
+        }
+        m_activeSampleRect = sampleRect;
+        m_activeFontKey = fontKey;
+        m_activeBandSize = band.size();
+    }
+
+    return m_activeColors;
 }
 
 LyricsScriptButton::LyricsScriptButton(QWidget *parent) : QPushButton(parent)

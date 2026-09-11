@@ -7,6 +7,7 @@
 #include <QAudioOutput>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMediaPlayer>
 #include <QMenu>
@@ -171,11 +172,28 @@ void MainWindow::createPlayerBar()
     queueLayout->setSpacing(8);
     auto *queueTitle = new QLabel(QStringLiteral("播放列表"), m_queueDrawer);
     queueTitle->setObjectName(QStringLiteral("sectionLabel"));
+    m_queueSearchEditor = new QLineEdit(m_queueDrawer);
+    m_queueSearchEditor->setObjectName(QStringLiteral("queueSearchEditor"));
+    m_queueSearchEditor->setPlaceholderText(QStringLiteral("搜索播放列表"));
+    m_queueSearchEditor->setAccessibleName(QStringLiteral("搜索播放列表"));
+    m_queueSearchEditor->setClearButtonEnabled(true);
+    auto *queueHeaderLayout = new QHBoxLayout;
+    queueHeaderLayout->setContentsMargins(0, 0, 22, 0);
+    queueHeaderLayout->setSpacing(12);
+    queueHeaderLayout->addWidget(queueTitle);
+    queueHeaderLayout->addWidget(m_queueSearchEditor, 1);
     m_queue = new QListWidget(m_queueDrawer);
     m_queue->setObjectName(QStringLiteral("queueList"));
+    m_queue->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_queue->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_queue->setTextElideMode(Qt::ElideRight);
+    m_queue->setWordWrap(false);
+    m_queue->setResizeMode(QListView::Adjust);
     m_queue->setContextMenuPolicy(Qt::CustomContextMenu);
-    queueLayout->addWidget(queueTitle);
+    queueLayout->addLayout(queueHeaderLayout);
     queueLayout->addWidget(m_queue);
+    connect(m_queueSearchEditor, &QLineEdit::textChanged, this,
+            &MainWindow::filterPlaybackQueue);
     m_queueDrawer->hide();
     m_queueDrawerAnimation = new QPropertyAnimation(m_queueDrawer, "geometry", this);
     m_queueDrawerAnimation->setDuration(220);

@@ -2,9 +2,9 @@
 
 #include <QDateTime>
 #include <QFileInfo>
-#include <QGraphicsBlurEffect>
-#include <QGraphicsPixmapItem>
-#include <QGraphicsScene>
+#include <QDebug>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
 #include <QImage>
 #include <QImageReader>
 #include <QMediaPlayer>
@@ -35,24 +35,74 @@ QImage loadScaledImage(const QString &path, const QSize &bounds)
     return image;
 }
 
+namespace {
+QString cachedSamplePath;
+QDateTime cachedSampleModified;
+qint64 cachedSampleBytes = -1;
+QImage cachedSampleImage;
+
+// 三次可分离均值模糊近似柔和的高斯效果；仅操作工作线程自己的 QImage。
+QImage blurBackground(QImage image, int radius)
+{
+    image = image.convertToFormat(QImage::Format_RGB32);
+    for (int pass = 0; pass < 3; ++pass) {
+        for (int axis = 0; axis < 2; ++axis) {
+            QImage output(image.size(), QImage::Format_RGB32);
+            if (output.isNull()) {
+                return {};
+            }
+            const int length = axis == 0 ? image.width() : image.height();
+            const int lines = axis == 0 ? image.height() : image.width();
+            for (int line = 0; line < lines; ++line) {
+                const auto pixel = [&](int position) {
+                    const int bounded = qBound(0, position, length - 1);
+                    return axis == 0 ? image.pixel(bounded, line) : image.pixel(line, bounded);
+                };
+                int red = 0;
+                int green = 0;
+                int blue = 0;
+                const auto accumulate = [&](QRgb color, int sign) {
+                    red += sign * qRed(color);
+                    green += sign * qGreen(color);
+                    blue += sign * qBlue(color);
+                };
+                for (int offset = -radius; offset <= radius; ++offset) {
+                    accumulate(pixel(offset), 1);
+                }
+                const int count = radius * 2 + 1;
+                for (int position = 0; position < length; ++position) {
+                    const QRgb color = qRgb(red / count, green / count, blue / count);
+                    output.setPixel(axis == 0 ? position : line,
+                                    axis == 0 ? line : position, color);
+                    accumulate(pixel(position - radius), -1);
+                    accumulate(pixel(position + radius + 1), 1);
+                }
+            }
+            image = output;
+        }
+    }
+    return image;
+}
+}
+
+void cacheBackgroundSample(const QString &path, const QImage &image)
+{
+    // 仅在主线程发布和读取缓存，后台解码不持有界面对象。
+    const QFileInfo file(path);
+    cachedSamplePath = path;
+    cachedSampleModified = file.lastModified();
+    cachedSampleBytes = file.size();
+    cachedSampleImage = image;
+}
+
 QImage backgroundSample(const QString &path)
 {
-    // One shared small image serves all UI color sampling; never cache full source images here.
-    static QString cachedPath;
-    static QDateTime cachedModified;
-    static qint64 cachedBytes = -1;
-    static QImage cachedImage;
     const QFileInfo file(path);
-    const QDateTime modified = file.lastModified();
-    const qint64 bytes = file.size();
-    if (path != cachedPath || modified != cachedModified || bytes != cachedBytes ||
-        cachedImage.isNull()) {
-        cachedImage = loadScaledImage(path, QSize(384, 384));
-        cachedPath = path;
-        cachedModified = modified;
-        cachedBytes = bytes;
+    if (path != cachedSamplePath || file.lastModified() != cachedSampleModified ||
+        file.size() != cachedSampleBytes || cachedSampleImage.isNull()) {
+        cacheBackgroundSample(path, loadScaledImage(path, QSize(384, 384)));
     }
-    return cachedImage;
+    return cachedSampleImage;
 }
 
 QueueDrawer::QueueDrawer(QWidget *parent) : QWidget(parent)
@@ -93,14 +143,16 @@ AppSurface::AppSurface(QWidget *parent) : QWidget(parent), m_backgroundResizeTim
 bool AppSurface::setBackground(const QString &path)
 {
     m_backgroundResizeTimer.stop();
-    m_backgroundPath = path;
     QImageReader reader(path);
-    m_backgroundSourceSize = reader.size();
-    m_background = {};
+    if (!reader.canRead()) {
+        return false;
+    }
+    m_backgroundPath = path;
+    ++m_backgroundGeneration;
     updateBackgroundTone();
     rebuildBlurredBackground();
     update();
-    return !m_sharpBackground.isNull();
+    return true;
 }
 
 void AppSurface::setBlurTargets(QWidget *content, QWidget *playerBar)
@@ -150,7 +202,7 @@ void AppSurface::paintEvent(QPaintEvent *)
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     painter.fillRect(rect(), QColor(QStringLiteral("#0b0d14")));
-    if (m_background.isNull()) {
+    if (m_sharpBackground.isNull()) {
         return;
     }
     painter.drawPixmap(rect(), m_sharpBackground);
@@ -185,66 +237,63 @@ void AppSurface::resizeEvent(QResizeEvent *event)
 void AppSurface::rebuildBlurredBackground()
 {
     if (m_backgroundPath.isEmpty() || size().isEmpty()) {
-        m_sharpBackground = {};
-        m_blurredBackground = {};
         return;
     }
-
-    // Round physical pixel dimensions into buckets to avoid decoding on every resize pixel.
+    const quint64 generation = ++m_backgroundGeneration;
+    const QString path = m_backgroundPath;
+    const QSize logicalSize = size();
     const qreal scale = devicePixelRatioF();
-    const QSize bounds(((qCeil(width() * scale) + 255) / 256) * 256,
-                       ((qCeil(height() * scale) + 255) / 256) * 256);
-    QSize required = m_backgroundSourceSize.isValid()
-                         ? m_backgroundSourceSize.scaled(bounds, Qt::KeepAspectRatioByExpanding)
-                         : bounds;
-    if (m_backgroundSourceSize.isValid() &&
-        required.width() > m_backgroundSourceSize.width()) {
-        required = m_backgroundSourceSize;
-    }
-    if (m_background.isNull() || m_background.width() < required.width() ||
-        m_background.height() < required.height() ||
-        m_background.width() > required.width() * 1.5 ||
-        m_background.height() > required.height() * 1.5) {
-        m_background = QPixmap::fromImage(loadScaledImage(m_backgroundPath, required));
-    }
-    if (m_background.isNull()) {
-        m_sharpBackground = {};
-        m_blurredBackground = {};
-        return;
-    }
-
-    QPixmap canvas(size() * scale);
-    canvas.setDevicePixelRatio(scale);
-    canvas.fill(m_edgeColor);
-    {
-        QPainter painter(&canvas);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        const QSizeF scaled = QSizeF(m_background.size()).scaled(size(), Qt::KeepAspectRatioByExpanding);
-        const QRectF target((width() - scaled.width()) / 2, (height() - scaled.height()) / 2,
-                            scaled.width(), scaled.height());
-        painter.drawPixmap(target, m_background, QRectF(m_background.rect()));
-    }
-    m_sharpBackground = canvas;
-
-    // Blur needs fewer pixels than the sharp layer; adjust the radius to retain its visual size.
-    const qreal blurScale = scale * 0.5;
-    const QSize blurSize(qMax(1, qCeil(width() * blurScale)),
-                         qMax(1, qCeil(height() * blurScale)));
-    QPixmap blurInput = canvas.scaled(blurSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    blurInput.setDevicePixelRatio(1.0);
-    QGraphicsScene scene;
-    scene.setSceneRect(QRectF(QPointF(0, 0), QSizeF(blurSize)));
-    auto *item = scene.addPixmap(blurInput);
-    auto *blur = new QGraphicsBlurEffect;
-    blur->setBlurHints(QGraphicsBlurEffect::QualityHint);
-    blur->setBlurRadius(28.0 * blurScale);
-    item->setGraphicsEffect(blur);
-
-    QImage blurred(blurSize, QImage::Format_ARGB32_Premultiplied);
-    blurred.fill(Qt::transparent);
-    QPainter painter(&blurred);
-    scene.render(&painter, QRectF(blurred.rect()), scene.sceneRect());
-    m_blurredBackground = QPixmap::fromImage(blurred);
+    const QColor edgeColor = m_edgeColor;
+    using BackgroundImages = QPair<QImage, QImage>;
+    auto *watcher = new QFutureWatcher<BackgroundImages>(this);
+    connect(watcher, &QFutureWatcher<BackgroundImages>::finished, this,
+            [this, watcher, generation] {
+                const auto images = watcher->result();
+                watcher->deleteLater();
+                // 过期的尺寸或背景任务不得覆盖后一次设置；销毁窗口会断开回调。
+                if (generation != m_backgroundGeneration) {
+                    return;
+                }
+                if (images.first.isNull() || images.second.isNull()) {
+                    qWarning() << "Failed to prepare window background";
+                    return;
+                }
+                m_sharpBackground = QPixmap::fromImage(images.first);
+                m_blurredBackground = QPixmap::fromImage(images.second);
+                update();
+            });
+    watcher->setFuture(QtConcurrent::run([path, logicalSize, scale, edgeColor] {
+        QImageReader reader(path);
+        const QSize sourceSize = reader.size();
+        const QSize physicalSize = logicalSize * scale;
+        const QSize required = sourceSize.isValid()
+                                   ? sourceSize.scaled(physicalSize, Qt::KeepAspectRatioByExpanding)
+                                   : physicalSize;
+        const QImage source = loadScaledImage(path, required);
+        if (source.isNull()) {
+            return BackgroundImages{};
+        }
+        QImage canvas(physicalSize, QImage::Format_ARGB32_Premultiplied);
+        if (canvas.isNull()) {
+            return BackgroundImages{};
+        }
+        canvas.fill(edgeColor);
+        {
+            QPainter painter(&canvas);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            const QSizeF scaled = QSizeF(source.size()).scaled(physicalSize, Qt::KeepAspectRatioByExpanding);
+            painter.drawImage(QRectF((physicalSize.width() - scaled.width()) / 2,
+                                     (physicalSize.height() - scaled.height()) / 2,
+                                     scaled.width(), scaled.height()), source);
+        }
+        const QSize blurSize(qMax(1, physicalSize.width() / 2),
+                             qMax(1, physicalSize.height() / 2));
+        QImage blurred = blurBackground(
+            canvas.scaled(blurSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation),
+            qMax(1, qRound(7 * scale)));
+        canvas.setDevicePixelRatio(scale);
+        return BackgroundImages{canvas, blurred};
+    }));
 }
 
 void AppSurface::updateBackgroundTone()

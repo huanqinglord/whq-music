@@ -9,7 +9,6 @@
 #include <QDebug>
 #include <QFileInfo>
 #include <QIcon>
-#include <QImage>
 #include <QListWidget>
 #include <QMediaMetaData>
 #include <QMediaPlayer>
@@ -287,16 +286,6 @@ void MainWindow::updateSongMetadata()
             updateCachedArtist(songId, artist);
         } else if (!error.isEmpty()) {
             qWarning() << "Failed to save playing song artist:" << songId;
-        }
-    }
-    const QVariant coverValue = metadata.value(QMediaMetaData::CoverArtImage);
-    if (coverValue.canConvert<QImage>()) {
-        const QImage coverImage = coverValue.value<QImage>();
-        if (!coverImage.isNull()) {
-            m_cover->setText({});
-            m_cover->setPixmap(QPixmap::fromImage(coverImage)
-                                   .scaled(m_cover->size(), Qt::KeepAspectRatioByExpanding,
-                                           Qt::SmoothTransformation));
         }
     }
 }

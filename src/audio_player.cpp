@@ -2,6 +2,7 @@
 #include "audio_decoder_worker.h"
 
 #include <QMediaDevices>
+#include <QMutexLocker>
 #include <QThread>
 #include <QTimer>
 
@@ -39,7 +40,7 @@ AudioPlayer::AudioPlayer(QObject *parent)
                 }
             }, Qt::QueuedConnection);
     connect(m_worker, &AudioDecoderWorker::bufferReady, this,
-            &AudioPlayer::receiveBuffer, Qt::QueuedConnection);
+            &AudioPlayer::receiveBuffer, Qt::DirectConnection);
     connect(m_worker, &AudioDecoderWorker::finished, this, [this](quint64 serial) {
         if (serial != m_control->serial.load()) {
             return;
@@ -76,6 +77,10 @@ QUrl AudioPlayer::source() const
 
 qint64 AudioPlayer::position() const
 {
+    const QMutexLocker locker(&m_transportMutex);
+    if (m_stream != 0 && m_outputSerial == m_control->serial.load()) {
+        return qMax(m_position, m_outputPosition);
+    }
     return m_position;
 }
 
@@ -152,7 +157,12 @@ void AudioPlayer::setPosition(qint64 position)
 
 void AudioPlayer::setAudioStream(quint64 stream)
 {
-    m_stream = stream;
+    {
+        const QMutexLocker locker(&m_transportMutex);
+        m_stream = stream;
+        // 新流必须等 scheduleDecoder 绑定解码序号，禁止把旧缓冲标成新歌曲。
+        m_outputSerial = 0;
+    }
     if (stream == 0) {
         cancelDecoder(false);
     }
@@ -217,6 +227,11 @@ void AudioPlayer::scheduleDecoder()
         const QString path = m_source.toLocalFile();
         const qint64 position = m_position;
         const QAudioDevice device = QMediaDevices::defaultAudioOutput();
+        {
+            const QMutexLocker locker(&m_transportMutex);
+            m_outputSerial = serial;
+            m_outputPosition = position;
+        }
         QMetaObject::invokeMethod(m_worker, [worker = m_worker, serial, path, position, device] {
             worker->open(serial, path, position, device);
         }, Qt::QueuedConnection);
@@ -225,12 +240,16 @@ void AudioPlayer::scheduleDecoder()
 
 void AudioPlayer::cancelDecoder(bool waitForClose)
 {
-    ++m_control->serial;
-    m_control->playing.store(false);
-    m_control->consumedFrames.store(0);
-    m_submittedFrames = 0;
-    m_outputRate = 0;
-    m_intervals.clear();
+    {
+        const QMutexLocker locker(&m_transportMutex);
+        ++m_control->serial;
+        m_control->playing.store(false);
+        m_control->consumedFrames.store(0);
+        m_outputSerial = 0;
+        m_submittedFrames = 0;
+        m_outputRate = 0;
+        m_intervals.clear();
+    }
     if (waitForClose) {
         // Metadata editing needs the file handle released, not merely paused.
         QMetaObject::invokeMethod(m_worker, &AudioDecoderWorker::close,
@@ -256,7 +275,8 @@ void AudioPlayer::setStatus(QMediaPlayer::MediaStatus status)
 
 void AudioPlayer::receiveBuffer(quint64 serial, const QAudioBuffer &buffer)
 {
-    if (serial != m_control->serial.load() || m_stream == 0) {
+    const QMutexLocker locker(&m_transportMutex);
+    if (serial != m_control->serial.load() || serial != m_outputSerial || m_stream == 0) {
         return;
     }
     if (buffer.isValid() && buffer.frameCount() > 0) {
@@ -264,18 +284,21 @@ void AudioPlayer::receiveBuffer(quint64 serial, const QAudioBuffer &buffer)
         m_intervals.push_back({m_submittedFrames, buffer.frameCount(), buffer.startTime()});
         m_submittedFrames += buffer.frameCount();
     }
+    // 校验、记账和投递不可被切流打断；下游直接槽只更新线程安全统计或入队。
     emit audioBufferReceived(m_stream, buffer);
 }
 
 void AudioPlayer::reportOutputProgress(quint64 stream, qint64 processedFrames)
 {
-    if (stream == 0 || stream != m_stream || m_outputRate <= 0) {
+    const QMutexLocker locker(&m_transportMutex);
+    if (stream == 0 || stream != m_stream || m_outputRate <= 0 ||
+        m_outputSerial != m_control->serial.load()) {
         return;
     }
     const qint64 frames = qBound<qint64>(0, processedFrames, m_submittedFrames);
     const qint64 consumed = qMax(frames, m_control->consumedFrames.load());
     m_control->consumedFrames.store(consumed);
-    qint64 positionUs = m_position * 1000;
+    qint64 positionUs = m_outputPosition * 1000;
     while (!m_intervals.empty()) {
         const AudioInterval &interval = m_intervals.front();
         if (consumed <= interval.firstFrame) {
@@ -288,9 +311,30 @@ void AudioPlayer::reportOutputProgress(quint64 stream, qint64 processedFrames)
         }
         m_intervals.pop_front();
     }
-    const qint64 position = qMax(m_position, positionUs / 1000);
+    const qint64 position = qMax(m_outputPosition, positionUs / 1000);
+    if (position != m_outputPosition) {
+        m_outputPosition = position;
+        // 主线程繁忙期间最多保留一个通知，消费反馈仍实时推进，解码不会断粮。
+        if (!m_positionUpdatePending) {
+            m_positionUpdatePending = true;
+            QMetaObject::invokeMethod(this, &AudioPlayer::publishOutputPosition, Qt::QueuedConnection);
+        }
+    }
+}
+
+void AudioPlayer::publishOutputPosition()
+{
+    qint64 position = 0;
+    {
+        const QMutexLocker locker(&m_transportMutex);
+        m_positionUpdatePending = false;
+        if (m_stream == 0 || m_outputSerial != m_control->serial.load()) {
+            return;
+        }
+        position = m_outputPosition;
+    }
     if (position != m_position) {
         m_position = position;
-        emit positionChanged(m_position);
+        emit positionChanged(position);
     }
 }

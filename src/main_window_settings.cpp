@@ -1,6 +1,7 @@
 #include "main_window.h"
 #include "player_widgets.h"
 
+#include <QApplication>
 #include <QEasingCurve>
 #include <QFileDialog>
 #include <QFontComboBox>
@@ -177,14 +178,18 @@ QWidget *MainWindow::createSettingsPage()
                  {QStringLiteral("background"), background}})) {
             return false;
         }
-        m_backgroundPath = background;
-        applyFonts(applicationFont, applicationFontSize, lyricsFont, lyricsFontSize);
-        static_cast<AppSurface *>(centralWidget())->setBackground(background);
-        updateLyricsPalette(background);
-        updateLyricsScriptButtonPalette(background);
-        updateCaptionButtonPalette(background);
-        updateSongInfoPalette(background);
-        updateDialogTheme(background);
+        const QFont currentApplicationFont = QApplication::font();
+        const QFont currentLyricsFont = m_lyrics->font();
+        const bool fontsChanged = currentApplicationFont.family() != applicationFont ||
+                                  currentApplicationFont.pixelSize() != applicationFontSize ||
+                                  currentLyricsFont.family() != lyricsFont ||
+                                  currentLyricsFont.pixelSize() != lyricsFontSize;
+        if (fontsChanged) {
+            applyFonts(applicationFont, applicationFontSize, lyricsFont, lyricsFontSize);
+        }
+        if (background != m_backgroundPath) {
+            applyBackground(background);
+        }
         updateSettingsPreview();
         settingsSuccessAnimation->stop();
         settingsSuccessAnimation->setCurrentTime(0);

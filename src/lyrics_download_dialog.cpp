@@ -1,10 +1,14 @@
 #include "lyrics_download_dialog.h"
 
 #include <QComboBox>
+#include <QCursor>
+#include <QDebug>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -13,6 +17,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -22,6 +27,7 @@
 #include <QStringConverter>
 #include <QStringList>
 #include <QStyle>
+#include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QTimer>
 #include <QUrl>
@@ -37,8 +43,8 @@
 
 namespace {
 constexpr int SourceTimeoutMs = 20000;
-constexpr int BackupLyricsTimeoutMs = 5000;
-constexpr int MaximumBackupCandidates = 5;
+constexpr int KugouKrcTimeoutMs = 5000;
+constexpr int MaximumKugouCandidates = 5;
 
 QString requestFailure(QNetworkReply *reply)
 {
@@ -78,6 +84,25 @@ bool containsLyricText(const QString &lyrics)
     return false;
 }
 
+class LyricsResultItemDelegate final : public QStyledItemDelegate
+{
+public:
+    explicit LyricsResultItemDelegate(QTableWidget *table)
+        : QStyledItemDelegate(table)
+    {
+    }
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        QStyleOptionViewItem rowOption(option);
+        rowOption.state &= ~QStyle::State_MouseOver;
+        rowOption.state &= ~QStyle::State_Selected;
+        rowOption.state &= ~QStyle::State_HasFocus;
+        QStyledItemDelegate::paint(painter, rowOption, index);
+    }
+};
+
 class LyricsResultTable final : public QTableWidget
 {
 public:
@@ -86,7 +111,7 @@ public:
         setColumnCount(5);
         setHorizontalHeaderLabels({QStringLiteral("歌名"), QStringLiteral("歌手"),
                                    QStringLiteral("专辑"), QStringLiteral("时长"),
-                                   QStringLiteral("滚动歌词")});
+                                   QStringLiteral("滚动模式")});
         horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
         horizontalHeader()->setMinimumSectionSize(0);
         horizontalHeader()->setStretchLastSection(false);
@@ -98,6 +123,8 @@ public:
         verticalHeader()->setDefaultSectionSize(qMax(36, fontMetrics().height() + 16));
         setSelectionBehavior(QAbstractItemView::SelectRows);
         setSelectionMode(QAbstractItemView::SingleSelection);
+        // 点击未完整显示的行时保持当前位置，避免选中操作触发自动滚动。
+        setAutoScroll(false);
         setEditTriggers(QAbstractItemView::NoEditTriggers);
         setSortingEnabled(false);
         setShowGrid(false);
@@ -105,6 +132,7 @@ public:
         setTextElideMode(Qt::ElideRight);
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         setMouseTracking(true);
+        setItemDelegate(new LyricsResultItemDelegate(this));
         connect(verticalScrollBar(), &QScrollBar::rangeChanged, this, [this] {
             // 等滚动条占用宽度更新后再分配列宽，避免末列被裁剪。
             QTimer::singleShot(0, this, [this] {
@@ -114,6 +142,46 @@ public:
     }
 
 protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        QTableWidget::paintEvent(event);
+        QPainter painter(viewport());
+        // 与音乐库一致，背景按整行绘制，避免单元格状态叠加造成局部高亮。
+        const auto fillRow = [this, &painter](int row, const QColor &color) {
+            QRect area = visualRect(model()->index(row, 0));
+            if (!area.isValid()) {
+                return;
+            }
+            area.setLeft(0);
+            area.setRight(viewport()->width() - 1);
+            painter.fillRect(area, color);
+        };
+        const QModelIndexList selectedRows = selectionModel()->selectedRows();
+        for (const QModelIndex &index : selectedRows) {
+            fillRow(index.row(), QColor(255, 255, 255, 26));
+        }
+        // 根据当前鼠标位置计算，滚动后也不会保留旧行的悬停状态。
+        const QPoint position = viewport()->mapFromGlobal(QCursor::pos());
+        if (!viewport()->underMouse() || !viewport()->rect().contains(position)) {
+            return;
+        }
+        const QModelIndex hovered = indexAt(position);
+        if (hovered.isValid() &&
+            !selectionModel()->isRowSelected(hovered.row(), QModelIndex())) {
+            fillRow(hovered.row(), QColor(255, 255, 255, 16));
+        }
+    }
+
+    bool viewportEvent(QEvent *event) override
+    {
+        if (event->type() == QEvent::MouseMove || event->type() == QEvent::Enter ||
+            event->type() == QEvent::Leave) {
+            // 默认只重绘鼠标经过的单元格，这里让整行各列同步更新高亮。
+            viewport()->update();
+        }
+        return QTableWidget::viewportEvent(event);
+    }
+
     void resizeEvent(QResizeEvent *event) override
     {
         QTableWidget::resizeEvent(event);
@@ -126,7 +194,7 @@ private:
         constexpr int durationWidth = 70;
         const int scrollingWidth = qMax(
             90,
-            horizontalHeader()->fontMetrics().horizontalAdvance(QStringLiteral("滚动歌词")) + 24);
+            horizontalHeader()->fontMetrics().horizontalAdvance(QStringLiteral("滚动模式")) + 24);
         const int available = qMax(0, viewport()->width() - durationWidth - scrollingWidth);
         const int titleWidth = available * 2 / 5;
         const int artistWidth = available / 5;
@@ -182,10 +250,10 @@ LyricsDownloadDialog::LyricsDownloadDialog(const QString &audioPath,
     m_sourceSelector = new QComboBox(this);
     m_sourceSelector->setAccessibleName(QStringLiteral("歌词来源"));
     m_sourceSelector->addItem(QStringLiteral("自动切换"), static_cast<int>(Source::Automatic));
-    m_sourceSelector->addItem(QStringLiteral("LRCLIB"), static_cast<int>(Source::Lrclib));
     m_sourceSelector->addItem(QStringLiteral("酷狗"), static_cast<int>(Source::Kugou));
+    m_sourceSelector->addItem(QStringLiteral("LRCLIB"), static_cast<int>(Source::Lrclib));
     m_sourceSelector->setToolTip(
-        QStringLiteral("自动：先 LRCLIB，失败后尝试酷狗；也可指定单一来源"));
+        QStringLiteral("自动：先酷狗，失败或无可用歌词时尝试 LRCLIB；也可指定单一来源"));
     searchRow->addWidget(m_searchEditor, 1);
     searchRow->addWidget(m_sourceSelector);
     searchRow->addWidget(m_searchButton);
@@ -309,33 +377,22 @@ void LyricsDownloadDialog::startSearch()
     m_preview->clear();
     m_downloadButton->setEnabled(false);
     m_closeButton->setText(QStringLiteral("取消"));
-
     const QString keyword = m_searchEditor->text().trimmed();
     if (keyword.isEmpty()) {
         setStatus(QStringLiteral("请输入歌曲名称后搜索。"), StatusTone::Error);
         m_searchEditor->setFocus();
         return;
     }
-
     m_searchKeyword = keyword;
-    m_searchStage = SearchStage::PrimarySearch;
-    m_primaryFailure.clear();
-    m_backupFailure.clear();
-    m_primaryNoResults = false;
-    m_backupHadError = false;
-    m_backupCandidates.clear();
-    m_backupCandidateIndex = 0;
-    m_sourceElapsed.start();
-    if (m_searchSource == Source::Kugou) {
-        startBackupSearch({});
-        return;
+    m_kugouFailure.clear();
+    m_kugouHadError = false;
+    m_kugouCandidates.clear();
+    m_kugouCandidateIndex = 0;
+    if (m_searchSource == Source::Lrclib) {
+        startLrclibSearch();
+    } else {
+        startKugouSearch();
     }
-    QUrl url(QStringLiteral("https://lrclib.net/api/search"));
-    QUrlQuery query;
-    query.addQueryItem(QStringLiteral("q"), m_searchKeyword);
-    url.setQuery(query);
-    setStatus(QStringLiteral("正在通过 LRCLIB 搜索“%1”……").arg(m_searchKeyword));
-    sendSearchRequest(url);
 }
 
 void LyricsDownloadDialog::sendSearchRequest(const QUrl &url)
@@ -345,8 +402,9 @@ void LyricsDownloadDialog::sendSearchRequest(const QUrl &url)
         handleSearchFailure(QStringLiteral("请求超时"));
         return;
     }
-    const int timeout = m_searchStage == SearchStage::BackupLyrics
-                            ? static_cast<int>(qMin<qint64>(BackupLyricsTimeoutMs, remaining))
+    const int timeout = (m_searchStage == SearchStage::KugouKrc ||
+                         m_searchStage == SearchStage::KugouLrc)
+                            ? static_cast<int>(qMin<qint64>(KugouKrcTimeoutMs, remaining))
                             : static_cast<int>(remaining);
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::UserAgentHeader,
@@ -390,59 +448,90 @@ void LyricsDownloadDialog::finishSearch(QNetworkReply *reply, quint64 generation
         return;
     }
     switch (m_searchStage) {
-    case SearchStage::PrimarySearch:
-        parsePrimaryResults(document);
+    case SearchStage::LrclibSearch:
+        parseLrclibResults(document);
         break;
-    case SearchStage::BackupSearch:
-        parseBackupCandidates(document);
+    case SearchStage::KugouSearch:
+        parseKugouCandidates(document);
         break;
-    case SearchStage::BackupLyrics:
-        parseBackupLyrics(document);
+    case SearchStage::KugouKrc:
+    case SearchStage::KugouLrc:
+        parseKugouLyrics(document);
         break;
     }
 }
 
 void LyricsDownloadDialog::handleSearchFailure(const QString &reason)
 {
-    if (m_searchStage == SearchStage::PrimarySearch) {
-        startBackupSearch(reason);
+    qWarning() << "Lyrics request failed, stage:" << static_cast<int>(m_searchStage)
+               << "reason:" << reason;
+    if (m_searchStage == SearchStage::LrclibSearch) {
+        finishLrclibFailure(reason);
         return;
     }
-    m_backupFailure = reason;
-    m_backupHadError = true;
-    if (m_searchStage == SearchStage::BackupLyrics) {
-        fetchNextBackupLyrics();
+    if (m_searchStage == SearchStage::KugouKrc) {
+        // 同一候选先取逐字，失败后只回退一次 LRC，不让失败候选阻止其他结果。
+        fetchKugouLyrics(false);
+        return;
+    }
+    m_kugouFailure = reason;
+    m_kugouHadError = true;
+    if (m_searchStage == SearchStage::KugouLrc) {
+        fetchNextKugouLyrics();
     } else {
-        finishBackupSearch();
+        finishKugouSearch();
     }
 }
 
-void LyricsDownloadDialog::startBackupSearch(const QString &reason, bool noResults)
+void LyricsDownloadDialog::startKugouSearch()
 {
-    if (m_searchSource == Source::Lrclib) {
-        setStatus(QStringLiteral("LRCLIB：%1，请调整歌名或切换歌词来源后重试。").arg(reason),
-                  noResults ? StatusTone::Neutral : StatusTone::Error);
-        return;
-    }
-    m_primaryFailure = reason;
-    m_primaryNoResults = noResults;
-    m_searchStage = SearchStage::BackupSearch;
+    m_searchStage = SearchStage::KugouSearch;
     m_sourceElapsed.restart();
-    setStatus(m_searchSource == Source::Kugou
-                  ? QStringLiteral("正在通过酷狗搜索“%1”……").arg(m_searchKeyword)
-                  : QStringLiteral("LRCLIB %1，正在尝试备用歌词源：酷狗……").arg(reason));
+    setStatus(QStringLiteral("正在通过酷狗搜索“%1”……").arg(m_searchKeyword));
     QUrl url(QStringLiteral("https://lyrics.kugou.com/search"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("ver"), QStringLiteral("1"));
     query.addQueryItem(QStringLiteral("man"), QStringLiteral("yes"));
     query.addQueryItem(QStringLiteral("client"), QStringLiteral("pc"));
     query.addQueryItem(QStringLiteral("keyword"), m_searchKeyword);
-    query.addQueryItem(QStringLiteral("duration"), QString::number(m_audioDurationMs));
+    if (m_audioDurationMs > 0) {
+        query.addQueryItem(QStringLiteral("duration"), QString::number(m_audioDurationMs));
+    }
     url.setQuery(query);
     sendSearchRequest(url);
 }
 
-void LyricsDownloadDialog::parsePrimaryResults(const QJsonDocument &document)
+void LyricsDownloadDialog::startLrclibSearch()
+{
+    m_searchStage = SearchStage::LrclibSearch;
+    m_sourceElapsed.restart();
+    setStatus(m_searchSource == Source::Automatic
+                  ? QStringLiteral("酷狗未取得可用歌词，正在尝试 LRCLIB……")
+                  : QStringLiteral("正在通过 LRCLIB 搜索“%1”……").arg(m_searchKeyword));
+    QUrl url(QStringLiteral("https://lrclib.net/api/search"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("q"), m_searchKeyword);
+    url.setQuery(query);
+    sendSearchRequest(url);
+}
+
+void LyricsDownloadDialog::finishLrclibFailure(const QString &reason, bool noResults)
+{
+    if (m_searchSource == Source::Lrclib) {
+        setStatus(QStringLiteral("LRCLIB：%1，请调整歌名或切换来源后重试。").arg(reason),
+                  noResults ? StatusTone::Neutral : StatusTone::Error);
+        return;
+    }
+    if (noResults && !m_kugouHadError) {
+        setStatus(QStringLiteral("酷狗和 LRCLIB 均未找到可用歌词，请调整歌曲名称后重新搜索。"));
+        return;
+    }
+    const QString kugouReason = m_kugouHadError ? m_kugouFailure : QStringLiteral("未找到可用歌词");
+    setStatus(QStringLiteral("两个歌词源均未取得可用歌词。酷狗：%1；LRCLIB：%2。请稍后重试。")
+                  .arg(kugouReason, reason), StatusTone::Error);
+}
+
+void LyricsDownloadDialog::parseLrclibResults(const QJsonDocument &document)
 {
     if (!document.isArray()) {
         handleSearchFailure(QStringLiteral("返回数据格式异常"));
@@ -455,13 +544,13 @@ void LyricsDownloadDialog::parsePrimaryResults(const QJsonDocument &document)
         const QJsonObject object = value.toObject();
         LyricResult result;
         result.lyrics = object.value(QStringLiteral("syncedLyrics")).toString();
-        result.synchronized = !result.lyrics.trimmed().isEmpty();
-        if (!result.synchronized) {
+        if (result.lyrics.trimmed().isEmpty()) {
             result.lyrics = object.value(QStringLiteral("plainLyrics")).toString();
         }
         if (!containsLyricText(result.lyrics)) {
             continue;
         }
+        result.mode = Lyrics::mode(Lyrics::parseTimed(result.lyrics));
         result.title = object.value(QStringLiteral("trackName")).toString().trimmed();
         result.artist = object.value(QStringLiteral("artistName")).toString().trimmed();
         result.album = object.value(QStringLiteral("albumName")).toString().trimmed();
@@ -484,13 +573,13 @@ void LyricsDownloadDialog::parsePrimaryResults(const QJsonDocument &document)
     }
 
     if (m_results.isEmpty()) {
-        startBackupSearch(QStringLiteral("未找到可用歌词"), true);
+        finishLrclibFailure(QStringLiteral("未找到可用歌词"), true);
         return;
     }
     showSearchResults(QStringLiteral("LRCLIB"));
 }
 
-void LyricsDownloadDialog::parseBackupCandidates(const QJsonDocument &document)
+void LyricsDownloadDialog::parseKugouCandidates(const QJsonDocument &document)
 {
     const QJsonObject object = document.object();
     if (!document.isObject() || object.value(QStringLiteral("status")).toInt() != 200 ||
@@ -504,7 +593,7 @@ void LyricsDownloadDialog::parseBackupCandidates(const QJsonDocument &document)
             continue;
         }
         const QJsonObject candidate = value.toObject();
-        BackupCandidate item;
+        KugouCandidate item;
         const QJsonValue id = candidate.value(QStringLiteral("id"));
         item.id = id.isString() ? id.toString() : QString::number(id.toInteger(-1));
         item.accessKey = candidate.value(QStringLiteral("accesskey")).toString();
@@ -525,20 +614,20 @@ void LyricsDownloadDialog::parseBackupCandidates(const QJsonDocument &document)
             duration < static_cast<double>(std::numeric_limits<qint64>::max())) {
             item.result.durationSeconds = duration / 1000.0;
         }
-        m_backupCandidates.append(std::move(item));
+        m_kugouCandidates.append(std::move(item));
     }
-    if (m_backupCandidates.isEmpty()) {
+    if (m_kugouCandidates.isEmpty()) {
         if (!candidates.isEmpty()) {
-            m_backupHadError = true;
-            m_backupFailure = QStringLiteral("搜索结果缺少必要信息");
+            m_kugouHadError = true;
+            m_kugouFailure = QStringLiteral("搜索结果缺少必要信息");
         }
-        finishBackupSearch();
+        finishKugouSearch();
         return;
     }
     if (m_audioDurationMs > 0) {
         const double localSeconds = m_audioDurationMs / 1000.0;
-        std::stable_sort(m_backupCandidates.begin(), m_backupCandidates.end(),
-                         [localSeconds](const BackupCandidate &left, const BackupCandidate &right) {
+        std::stable_sort(m_kugouCandidates.begin(), m_kugouCandidates.end(),
+                         [localSeconds](const KugouCandidate &left, const KugouCandidate &right) {
                              const double leftDifference =
                                  left.result.durationSeconds > 0.0
                                      ? std::abs(left.result.durationSeconds - localSeconds)
@@ -550,43 +639,54 @@ void LyricsDownloadDialog::parseBackupCandidates(const QJsonDocument &document)
                              return leftDifference < rightDifference;
                          });
     }
-    // 控制请求数量，并共享备用源总时限，避免候选过多导致长时间等待。
-    if (m_backupCandidates.size() > MaximumBackupCandidates) {
-        m_backupCandidates.resize(MaximumBackupCandidates);
+    // 控制请求数量，KRC 与 LRC 回退共享酷狗总时限，避免候选过多导致长时间等待。
+    if (m_kugouCandidates.size() > MaximumKugouCandidates) {
+        m_kugouCandidates.resize(MaximumKugouCandidates);
     }
-    fetchNextBackupLyrics();
+    fetchNextKugouLyrics();
 }
 
-void LyricsDownloadDialog::fetchNextBackupLyrics()
+void LyricsDownloadDialog::fetchNextKugouLyrics()
+{
+    if (m_kugouCandidateIndex >= m_kugouCandidates.size()) {
+        finishKugouSearch();
+        return;
+    }
+    ++m_kugouCandidateIndex;
+    fetchKugouLyrics(true);
+}
+
+void LyricsDownloadDialog::fetchKugouLyrics(bool wordTimed)
 {
     if (m_sourceElapsed.elapsed() >= SourceTimeoutMs) {
-        m_backupHadError = true;
-        m_backupFailure = QStringLiteral("请求超时");
-        finishBackupSearch();
+        m_kugouHadError = true;
+        m_kugouFailure = QStringLiteral("请求超时");
+        finishKugouSearch();
         return;
     }
-    if (m_backupCandidateIndex >= m_backupCandidates.size()) {
-        finishBackupSearch();
+    if (m_kugouCandidateIndex <= 0 || m_kugouCandidateIndex > m_kugouCandidates.size()) {
+        finishKugouSearch();
         return;
     }
-    m_searchStage = SearchStage::BackupLyrics;
-    const BackupCandidate &candidate = m_backupCandidates.at(m_backupCandidateIndex++);
-    setStatus(QStringLiteral("正在从酷狗获取歌词：%1 / %2……")
-                  .arg(m_backupCandidateIndex)
-                  .arg(m_backupCandidates.size()));
+    m_searchStage = wordTimed ? SearchStage::KugouKrc : SearchStage::KugouLrc;
+    const KugouCandidate &candidate = m_kugouCandidates.at(m_kugouCandidateIndex - 1);
+    setStatus(QStringLiteral("正在从酷狗获取%1歌词：%2 / %3……")
+                  .arg(wordTimed ? QStringLiteral("逐字") : QStringLiteral("逐句"))
+                  .arg(m_kugouCandidateIndex)
+                  .arg(m_kugouCandidates.size()));
     QUrl url(QStringLiteral("https://lyrics.kugou.com/download"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("ver"), QStringLiteral("1"));
     query.addQueryItem(QStringLiteral("client"), QStringLiteral("pc"));
     query.addQueryItem(QStringLiteral("id"), candidate.id);
     query.addQueryItem(QStringLiteral("accesskey"), candidate.accessKey);
-    query.addQueryItem(QStringLiteral("fmt"), QStringLiteral("lrc"));
+    query.addQueryItem(QStringLiteral("fmt"), wordTimed ? QStringLiteral("krc") : QStringLiteral("lrc"));
     query.addQueryItem(QStringLiteral("charset"), QStringLiteral("utf8"));
     url.setQuery(query);
     sendSearchRequest(url);
 }
 
-void LyricsDownloadDialog::parseBackupLyrics(const QJsonDocument &document)
+void LyricsDownloadDialog::parseKugouLyrics(const QJsonDocument &document)
 {
     const QJsonObject object = document.object();
     if (!document.isObject() || object.value(QStringLiteral("status")).toInt() != 200 ||
@@ -594,52 +694,57 @@ void LyricsDownloadDialog::parseBackupLyrics(const QJsonDocument &document)
         handleSearchFailure(QStringLiteral("歌词返回数据异常"));
         return;
     }
-    const auto decoded = QByteArray::fromBase64Encoding(
-        object.value(QStringLiteral("content")).toString().toLatin1(),
-        QByteArray::AbortOnBase64DecodingErrors);
+    const QString encoded = object.value(QStringLiteral("content")).toString();
+    if (encoded.size() > 4 * 1024 * 1024) {
+        handleSearchFailure(QStringLiteral("歌词文件过大"));
+        return;
+    }
+    const auto decoded = QByteArray::fromBase64Encoding(encoded.toLatin1(),
+                                                        QByteArray::AbortOnBase64DecodingErrors);
     if (decoded.decodingStatus != QByteArray::Base64DecodingStatus::Ok) {
         handleSearchFailure(QStringLiteral("歌词内容无法解码"));
         return;
     }
-    QStringDecoder decoder(QStringDecoder::Utf8);
-    const QString lyrics = decoder(decoded.decoded);
-    if (decoder.hasError()) {
-        handleSearchFailure(QStringLiteral("歌词文本编码异常"));
+    QString lyrics;
+    if (m_searchStage == SearchStage::KugouKrc) {
+        QString error;
+        if (!Lyrics::decodeKrc(decoded.decoded, lyrics, error)) {
+            handleSearchFailure(error);
+            return;
+        }
+    } else {
+        QStringDecoder decoder(QStringDecoder::Utf8);
+        lyrics = decoder(decoded.decoded);
+        if (decoder.hasError()) {
+            handleSearchFailure(QStringLiteral("歌词文本编码异常"));
+            return;
+        }
+    }
+    if (!containsLyricText(Lyrics::previewText(lyrics))) {
+        handleSearchFailure(QStringLiteral("歌词内容为空或无效"));
         return;
     }
-    if (containsLyricText(lyrics)) {
-        LyricResult result = m_backupCandidates.at(m_backupCandidateIndex - 1).result;
-        result.lyrics = lyrics;
-        static const QRegularExpression timestamp(
-            QStringLiteral("\\[\\d{1,3}:\\d{2}(?:[.:]\\d{1,3})?\\]"));
-        result.synchronized = timestamp.match(lyrics).hasMatch();
-        m_results.append(std::move(result));
-    }
-    fetchNextBackupLyrics();
+    LyricResult result = m_kugouCandidates.at(m_kugouCandidateIndex - 1).result;
+    // 保留解码后的完整 KRC 文本写入原有歌词标签，重新载入时仍可恢复字词时间。
+    result.lyrics = lyrics;
+    result.mode = Lyrics::mode(Lyrics::parseTimed(lyrics));
+    m_results.append(std::move(result));
+    fetchNextKugouLyrics();
 }
 
-void LyricsDownloadDialog::finishBackupSearch()
+void LyricsDownloadDialog::finishKugouSearch()
 {
     if (!m_results.isEmpty()) {
         showSearchResults(QStringLiteral("酷狗"));
         return;
     }
-    if (m_searchSource == Source::Kugou) {
-        setStatus(QStringLiteral("酷狗：%1，请调整歌名或切换歌词来源后重试。")
-                      .arg(m_backupHadError ? m_backupFailure : QStringLiteral("未找到可用歌词")),
-                  m_backupHadError ? StatusTone::Error : StatusTone::Neutral);
+    if (m_searchSource == Source::Automatic) {
+        startLrclibSearch();
         return;
     }
-    if (m_primaryNoResults && !m_backupHadError) {
-        setStatus(QStringLiteral("LRCLIB 和酷狗均未找到可用歌词，请调整歌曲名称后重新搜索。"));
-        return;
-    }
-    const QString backupReason =
-        m_backupHadError ? m_backupFailure : QStringLiteral("未找到可用歌词");
-    setStatus(QStringLiteral(
-                  "两个歌词源均未取得可用歌词。LRCLIB：%1；酷狗：%2。请稍后重试或调整歌曲名称。")
-                  .arg(m_primaryFailure, backupReason),
-              StatusTone::Error);
+    setStatus(QStringLiteral("酷狗：%1，请调整歌名或切换歌词来源后重试。")
+                  .arg(m_kugouHadError ? m_kugouFailure : QStringLiteral("未找到可用歌词")),
+              m_kugouHadError ? StatusTone::Error : StatusTone::Neutral);
 }
 
 void LyricsDownloadDialog::showSearchResults(const QString &source)
@@ -649,12 +754,12 @@ void LyricsDownloadDialog::showSearchResults(const QString &source)
         return result.durationSeconds > 0.0 ? std::abs(result.durationSeconds - localSeconds)
                                             : std::numeric_limits<double>::infinity();
     };
-    // 同步歌词优先；组内按时长差排序，无法比较或差值相同时保留接口顺序。
+    // 最终结果按逐字、逐句、无排序；同模式内按时长差排序，相同则保留接口顺序。
     std::stable_sort(
         m_results.begin(), m_results.end(),
         [localSeconds, &difference](const LyricResult &left, const LyricResult &right) {
-            if (left.synchronized != right.synchronized) {
-                return left.synchronized;
+            if (left.mode != right.mode) {
+                return static_cast<int>(left.mode) > static_cast<int>(right.mode);
             }
             if (localSeconds <= 0.0) {
                 return false;
@@ -671,8 +776,7 @@ void LyricsDownloadDialog::showSearchResults(const QString &source)
                                      ? durationText(qRound64(result.durationSeconds * 1000.0))
                                      : QStringLiteral("--:--");
             const QStringList values = {result.title, result.artist, result.album, time,
-                                        result.synchronized ? QStringLiteral("支持")
-                                                            : QStringLiteral("不支持")};
+                                        Lyrics::modeText(result.mode)};
             for (int column = 0; column < values.size(); ++column) {
                 const QString &value = values.at(column);
                 auto *item = new QTableWidgetItem(value);
@@ -706,7 +810,7 @@ void LyricsDownloadDialog::updateSelection()
         m_preview->clear();
         return;
     }
-    m_preview->setPlainText(m_results.at(row).lyrics);
+    m_preview->setPlainText(Lyrics::previewText(m_results.at(row).lyrics));
 }
 
 void LyricsDownloadDialog::saveSelectedLyrics(bool overwriteConfirmed)

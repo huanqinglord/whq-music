@@ -13,6 +13,8 @@
 #include <QFileDialog>
 #include <QFontComboBox>
 #include <QImage>
+#include <QFutureWatcher>
+#include <QtConcurrentRun>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMediaPlayer>
@@ -127,17 +129,17 @@ MainWindow::~MainWindow()
         m_trayIcon->hide();
     }
     if (m_player != nullptr) {
-        // 先销毁后台数据生产者，确保直接连接的入队回调已退出，再释放工作线程。
+        // 先等待解码生产者停止，再停止输出反馈线程，最后销毁共享接收方。
         m_player->disconnect(this);
         m_player->stop();
-        delete m_player;
-        m_player = nullptr;
     }
     if (m_audioEffectThread != nullptr) {
         m_audioEffectThread->quit();
         m_audioEffectThread->wait();
         m_audioEffectProcessor = nullptr;
     }
+    delete m_player;
+    m_player = nullptr;
 #ifdef Q_OS_WIN
     if (m_taskbar != nullptr) {
         m_taskbar->Release();
@@ -157,14 +159,46 @@ void MainWindow::chooseBackground()
         if (!saveSetting(QStringLiteral("background"), file)) {
             return;
         }
-        m_backgroundPath = file;
-        static_cast<AppSurface *>(centralWidget())->setBackground(file);
-        updateLyricsPalette(file);
-        updateLyricsScriptButtonPalette(file);
-        updateCaptionButtonPalette(file);
-        updateSongInfoPalette(file);
-        updateDialogTheme(file);
+        applyBackground(file);
     }
+}
+
+void MainWindow::applyBackground(const QString &path)
+{
+    m_backgroundPath = path;
+    const quint64 generation = ++m_backgroundUpdateGeneration;
+    using BackgroundImages = QPair<QImage, QImage>;
+    auto *watcher = new QFutureWatcher<BackgroundImages>(this);
+    connect(watcher, &QFutureWatcher<BackgroundImages>::finished, this,
+            [this, watcher, path, generation] {
+                const auto images = watcher->result();
+                watcher->deleteLater();
+                if (generation != m_backgroundUpdateGeneration) {
+                    return;
+                }
+                if (images.first.isNull()) {
+                    qWarning() << "Failed to load selected background";
+                    return;
+                }
+                cacheBackgroundSample(path, images.first);
+                static_cast<AppSurface *>(centralWidget())->setBackground(path);
+                updateLyricsPalette(path);
+                updateLyricsScriptButtonPalette(path);
+                updateCaptionButtonPalette(path);
+                updateSongInfoPalette(path);
+                updateDialogTheme(path);
+#ifdef Q_OS_WIN
+                m_taskbarBackground = images.second;
+                m_taskbarBackgroundPath = path;
+#endif
+                updateTaskbarBackground();
+            });
+    // 解码和采样在后台完成；主线程只安装结果，持续处理音频数据和界面事件。
+    watcher->setFuture(QtConcurrent::run([path] {
+        const QImage preview = loadScaledImage(path, QSize(2048, 2048));
+        return BackgroundImages{
+            preview.scaled(QSize(384, 384), Qt::KeepAspectRatio, Qt::SmoothTransformation), preview};
+    }));
 }
 
 void MainWindow::showSettings()
@@ -342,6 +376,9 @@ void MainWindow::toggleQueueDrawer()
     const QRect currentGeometry =
         m_queueDrawer->isVisible() ? m_queueDrawer->geometry() : queueDrawerRect(false);
     m_queueDrawerOpen = opening;
+    if (!opening) {
+        m_queueSearchEditor->clear();
+    }
     m_queueDrawer->setGeometry(currentGeometry);
     m_queueDrawer->update();
     m_queueDrawer->show();

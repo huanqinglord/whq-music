@@ -52,7 +52,7 @@ void MainWindow::initializePlayback()
     connect(m_audioEffectThread, &QThread::finished, m_audioEffectProcessor, &QObject::deleteLater);
     connect(m_playbackController, &PlaybackController::audioStreamChanged,
             m_audioEffectProcessor, &AudioEffectProcessor::setStream, Qt::DirectConnection);
-    connect(m_playbackController, &PlaybackController::audioBufferReceived,
+    connect(m_player, &AudioPlayer::audioBufferReceived,
             m_audioEffectProcessor, &AudioEffectProcessor::processBuffer, Qt::DirectConnection);
     connect(m_playbackController, &PlaybackController::outputPauseRequested,
             m_audioEffectProcessor, &AudioEffectProcessor::setPaused, Qt::DirectConnection);
@@ -86,7 +86,7 @@ void MainWindow::initializePlayback()
                 m_playbackController->finishNaturalEnd(request);
             }, Qt::QueuedConnection);
     connect(m_audioEffectProcessor, &AudioEffectProcessor::outputProgress, m_player,
-            &AudioPlayer::reportOutputProgress, Qt::QueuedConnection);
+            &AudioPlayer::reportOutputProgress, Qt::DirectConnection);
     m_audioEffectThread->start();
     connect(m_player, &AudioPlayer::sourceChanged, this, [this] {
         updateTaskbarToolbar();

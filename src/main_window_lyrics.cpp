@@ -170,43 +170,50 @@ void MainWindow::requestLyricsDownload(const QString &audioPath)
 
 bool MainWindow::loadTimestampedLyrics(const QString &content)
 {
-    if (content.trimmed().isEmpty()) {
-        return false;
-    }
-    const QRegularExpression timestamp(
-        QStringLiteral("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?\\]"));
-    const QStringList lines =
-        content.split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
-    for (const QString &line : lines) {
-        auto iterator = timestamp.globalMatch(line);
-        QString text = line;
-        text.remove(timestamp);
-        text = text.trimmed();
-        while (iterator.hasNext()) {
-            const auto match = iterator.next();
-            const qint64 minutes = match.captured(1).toLongLong();
-            const qint64 seconds = match.captured(2).toLongLong();
-            QString fraction = match.captured(3);
-            const qint64 milliseconds =
-                fraction.isEmpty()
-                    ? 0
-                    : fraction.leftJustified(3, QLatin1Char('0')).left(3).toLongLong();
-            m_lyricLines.append({(minutes * 60 + seconds) * 1000 + milliseconds, text});
-        }
-    }
-    std::sort(m_lyricLines.begin(), m_lyricLines.end(), [](const auto &left, const auto &right) {
-        return left.first < right.first;
-    });
-    for (const auto &line : std::as_const(m_lyricLines)) {
-        const QString lyricText =
-            line.second.isEmpty() ? QStringLiteral("···") : displayedLyricsText(line.second);
-        auto *item = new QListWidgetItem(lyricText);
-        item->setTextAlignment(Qt::AlignCenter);
-        item->setData(Qt::UserRole, line.first);
-        m_lyrics->addItem(item);
-    }
+    m_lyricLines = Lyrics::parseTimed(content);
     if (m_lyricLines.isEmpty()) {
         return false;
+    }
+    for (Lyrics::Line &line : m_lyricLines) {
+        if (line.words.isEmpty()) {
+            line.text = displayedLyricsText(line.text);
+        } else {
+            // 按字词转换繁简体并同步文本位置，不能转换整句后继续沿用旧字符下标。
+            const QString original = line.text;
+            QString displayed;
+            int consumed = 0;
+            for (Lyrics::Word &word : line.words) {
+                const int originalStart = word.textStart;
+                const int originalLength = word.textLength;
+                displayed += displayedLyricsText(original.mid(consumed, originalStart - consumed));
+                word.textStart = static_cast<int>(displayed.size());
+                const QString text = displayedLyricsText(original.mid(originalStart, originalLength));
+                displayed += text;
+                word.textLength = static_cast<int>(text.size());
+                consumed = originalStart + originalLength;
+            }
+            displayed += displayedLyricsText(original.mid(consumed));
+            line.text = displayed;
+        }
+        const QString lyricText = line.text.isEmpty() ? QStringLiteral("···") : line.text;
+        auto *item = new QListWidgetItem(lyricText);
+        item->setTextAlignment(Qt::AlignCenter);
+        item->setData(Qt::UserRole, line.startMs);
+        m_lyrics->addItem(item);
+    }
+    auto *delegate = static_cast<LyricsItemDelegate *>(m_lyrics->itemDelegate());
+    const auto next = std::upper_bound(
+        m_lyricLines.cbegin(), m_lyricLines.cend(), m_player->position(),
+        [](qint64 position, const Lyrics::Line &line) {
+            return position < line.startMs;
+        });
+    const int initialRow = qMax(0, static_cast<int>(next - m_lyricLines.cbegin()) - 1);
+    for (int row = initialRow; row < m_lyricLines.size() && row <= initialRow + 1; ++row) {
+        delegate->prepareLine(m_lyricLines.at(row));
+    }
+    if (m_lyricsScrollTimer != nullptr) {
+        // 等列表完成初始布局，再按当前播放位置定位，前奏期间也显示居中的首句。
+        m_lyricsScrollTimer->start(0);
     }
     return true;
 }
@@ -266,19 +273,25 @@ void MainWindow::updateLyrics(qint64 position)
     }
     const auto next = std::upper_bound(
         m_lyricLines.cbegin(), m_lyricLines.cend(), position,
-        [](qint64 time, const QPair<qint64, QString> &line) {
-            return time < line.first;
+        [](qint64 time, const Lyrics::Line &line) {
+            return time < line.startMs;
         });
     const int activeIndex = static_cast<int>(next - m_lyricLines.cbegin()) - 1;
     const bool playing = m_player->playbackState() == QMediaPlayer::PlayingState;
-    qint64 nextUpdate = next != m_lyricLines.cend() ? next->first - position : -1;
+    qint64 nextUpdate = next != m_lyricLines.cend() ? next->startMs - position : -1;
     auto *delegate = static_cast<LyricsItemDelegate *>(m_lyrics->itemDelegate());
     if (activeIndex < 0) {
+        const bool needsPositioning = m_lyricsViewDirty || m_currentLyricIndex >= 0;
         if (m_currentLyricIndex >= 0 && m_currentLyricIndex < m_lyrics->count()) {
             m_lyrics->item(m_currentLyricIndex)->setData(Qt::UserRole + 1, false);
         }
         m_currentLyricIndex = -1;
         delegate->setScrollProgress(0.0);
+        delegate->setFillProgress(0.0);
+        if (needsPositioning && !m_lyricLines.isEmpty() && m_lyrics->count() > 0) {
+            m_lyrics->scrollToItem(m_lyrics->item(0), QAbstractItemView::PositionAtCenter);
+            m_lyrics->viewport()->update();
+        }
         if (playing && nextUpdate > 0) {
             m_lyricsScrollTimer->start(static_cast<int>(qBound(qint64(16), nextUpdate,
                                                               qint64(60000))));
@@ -287,10 +300,12 @@ void MainWindow::updateLyrics(qint64 position)
         return;
     }
 
-    const qint64 start = m_lyricLines.at(activeIndex).first;
-    const qint64 end = activeIndex + 1 < m_lyricLines.size()
-                           ? m_lyricLines.at(activeIndex + 1).first
-                           : m_player->duration();
+    const Lyrics::Line &activeLine = m_lyricLines.at(activeIndex);
+    const qint64 start = activeLine.startMs;
+    const qint64 nextStart = activeIndex + 1 < m_lyricLines.size()
+                                ? m_lyricLines.at(activeIndex + 1).startMs
+                                : m_player->duration();
+    const qint64 end = activeLine.endMs > start ? activeLine.endMs : nextStart;
     const qint64 lineDuration = end > start ? end - start : 6000;
     // 根据歌曲时间计算位移：首尾各停留一小段，暂停和拖动进度时保持同步。
     const qint64 holdDuration = qMin(qint64(600), lineDuration / 5);
@@ -298,10 +313,6 @@ void MainWindow::updateLyrics(qint64 position)
     if (activeIndex >= m_lyrics->count()) {
         return;
     }
-    const bool longLine = delegate->needsHorizontalScroll(
-        m_lyrics->model()->index(activeIndex, 0), m_lyrics->viewport()->width());
-    const bool scrollChanged = delegate->setScrollProgress(
-        longLine ? static_cast<qreal>(position - start - holdDuration) / scrollDuration : 0.0);
     const bool lineChanged = activeIndex != m_currentLyricIndex;
     if (lineChanged) {
         if (m_currentLyricIndex >= 0 && m_currentLyricIndex < m_lyrics->count()) {
@@ -313,8 +324,43 @@ void MainWindow::updateLyrics(qint64 position)
     if (lineChanged || m_lyricsViewDirty) {
         m_lyrics->scrollToItem(m_lyrics->item(activeIndex), QAbstractItemView::PositionAtCenter);
     }
-    if (lineChanged || m_lyricsViewDirty || (longLine && scrollChanged)) {
-        m_lyrics->viewport()->update(m_lyrics->visualItemRect(m_lyrics->item(activeIndex)));
+    if (lineChanged || m_lyricsViewDirty) {
+        delegate->prepareLine(activeLine);
+        // 下一句在当前句已开始显示后预热，不把预热开销放在下一次换行的临界点。
+        QTimer::singleShot(40, this, [this] {
+            const int nextRow = m_currentLyricIndex + 1;
+            if (nextRow >= 0 && nextRow < m_lyricLines.size()) {
+                auto *currentDelegate = static_cast<LyricsItemDelegate *>(m_lyrics->itemDelegate());
+                currentDelegate->prepareLine(m_lyricLines.at(nextRow));
+            }
+        });
+    }
+    // 排版和居中完成后使用最新已上报的音频位置，不沿用准备之前的时间计算首帧填色。
+    position = m_player->position();
+    if (position < start || (next != m_lyricLines.cend() && position >= next->startMs)) {
+        m_lyricsViewDirty = true;
+        m_lyricsScrollTimer->start(0);
+        return;
+    }
+    nextUpdate = next != m_lyricLines.cend() ? next->startMs - position : -1;
+    const bool longLine = delegate->needsHorizontalScroll(
+        m_lyrics->model()->index(activeIndex, 0), m_lyrics->viewport()->width());
+    // 有字词时间时按真实时间和排版宽度填色；普通 LRC 保持句内匀速填色。
+    const bool wordTimed = !activeLine.words.isEmpty();
+    const qreal fillProgress = wordTimed
+                                   ? delegate->wordFillProgress(activeLine, position)
+                                   : static_cast<qreal>(position - start) / lineDuration;
+    const qreal scrollProgress = wordTimed
+                                     ? fillProgress
+                                     : static_cast<qreal>(position - start - holdDuration) / scrollDuration;
+    const bool scrollChanged = delegate->setScrollProgress(longLine ? scrollProgress : 0.0);
+    const bool fillChanged = delegate->setFillProgress(fillProgress);
+    if (lineChanged || m_lyricsViewDirty || fillChanged || (longLine && scrollChanged)) {
+        // 列表项可能只有占位宽度，实际歌词铺满视口，动画必须重绘整行。
+        QRect repaintArea = m_lyrics->visualItemRect(m_lyrics->item(activeIndex));
+        repaintArea.setLeft(0);
+        repaintArea.setRight(m_lyrics->viewport()->width() - 1);
+        m_lyrics->viewport()->update(repaintArea);
     }
     m_lyricsViewDirty = false;
     if (playing && longLine) {
@@ -326,7 +372,11 @@ void MainWindow::updateLyrics(qint64 position)
             nextUpdate = nextUpdate > 0 ? qMin(nextUpdate, animationDelay) : animationDelay;
         }
     }
-    // Short lines and the pauses at either end of a long line need only a boundary wakeup.
+    // 短句同样需要填色动画；填满后停止帧更新，只等待下一句，暂停时不启动定时器。
+    if (playing && position - start < lineDuration) {
+        const qint64 fillDelay = qMin(qint64(33), lineDuration - (position - start));
+        nextUpdate = nextUpdate > 0 ? qMin(nextUpdate, fillDelay) : fillDelay;
+    }
     if (playing && nextUpdate > 0) {
         m_lyricsScrollTimer->start(
             static_cast<int>(qBound(qint64(16), nextUpdate, qint64(60000))));

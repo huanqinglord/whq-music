@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QMediaPlayer>
 #include <QMenu>
+#include <QPainter>
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QSystemTrayIcon>
@@ -24,6 +25,7 @@
 #ifdef Q_OS_WIN
 #include <shobjidl.h>
 #include <windows.h>
+#include <dwmapi.h>
 
 #endif
 
@@ -44,6 +46,7 @@ enum class TaskbarCommand : unsigned int
 void MainWindow::initializeTaskbarToolbar()
 {
 #ifdef Q_OS_WIN
+    updateTaskbarBackground();
     // Explorer 重启或窗口重新进入任务栏后，旧代理和按钮注册都可能失效。
     m_taskbarButtonsAdded = false;
     if (m_taskbar != nullptr) {
@@ -136,10 +139,98 @@ void MainWindow::updateTaskbarToolbar()
 #endif
 }
 
+void MainWindow::updateTaskbarBackground()
+{
 #ifdef Q_OS_WIN
+    // 缓存图片，系统请求预览时不抓取屏幕，也不重复读取背景文件。
+    if (m_taskbarBackgroundPath != m_backgroundPath || m_taskbarBackground.isNull()) {
+        m_taskbarBackground = loadScaledImage(m_backgroundPath, QSize(2048, 2048));
+        if (m_taskbarBackground.isNull()) {
+            qWarning() << "Failed to read taskbar background";
+            m_taskbarBackground = loadScaledImage(kDefaultBackgroundPath, QSize(2048, 2048));
+        }
+        m_taskbarBackgroundPath = m_backgroundPath;
+    }
+
+    const HWND window = reinterpret_cast<HWND>(winId());
+    const BOOL enabled = TRUE;
+    for (const auto attribute : {DWMWA_FORCE_ICONIC_REPRESENTATION, DWMWA_HAS_ICONIC_BITMAP}) {
+        const HRESULT status = DwmSetWindowAttribute(window, attribute, &enabled, sizeof(enabled));
+        if (FAILED(status)) {
+            qWarning() << "Failed to configure taskbar background" << attribute << status;
+            return;
+        }
+    }
+    const HRESULT status = DwmInvalidateIconicBitmaps(window);
+    if (FAILED(status)) {
+        qWarning() << "Failed to refresh taskbar background" << status;
+    }
+#endif
+}
+
+#ifdef Q_OS_WIN
+bool MainWindow::publishTaskbarBackground(const QSize &maximumSize, bool livePreview)
+{
+    if (maximumSize.isEmpty()) {
+        return false;
+    }
+    const QSize imageSize = m_taskbarBackground.isNull()
+                                ? maximumSize
+                                : m_taskbarBackground.size().scaled(maximumSize, Qt::KeepAspectRatio);
+    QImage preview(livePreview ? maximumSize : imageSize, QImage::Format_ARGB32_Premultiplied);
+    if (preview.isNull()) {
+        qWarning() << "Failed to allocate taskbar background bitmap";
+        return false;
+    }
+    preview.fill(QColor(QStringLiteral("#0b0d14")));
+    if (!m_taskbarBackground.isNull()) {
+        QPainter painter(&preview);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        const QPoint origin((preview.width() - imageSize.width()) / 2,
+                            (preview.height() - imageSize.height()) / 2);
+        painter.drawImage(QRect(origin, imageSize), m_taskbarBackground);
+    }
+    const HBITMAP bitmap = preview.toHBITMAP();
+    if (bitmap == nullptr) {
+        qWarning() << "Failed to create taskbar background bitmap" << GetLastError();
+        return false;
+    }
+    const auto releaseBitmap = qScopeGuard([bitmap] {
+        DeleteObject(bitmap);
+    });
+    const HWND window = reinterpret_cast<HWND>(winId());
+    const HRESULT status = livePreview
+                               ? DwmSetIconicLivePreviewBitmap(window, bitmap, nullptr, 0)
+                               : DwmSetIconicThumbnail(window, bitmap, 0);
+    if (FAILED(status)) {
+        qWarning() << "Failed to publish taskbar background" << livePreview << status;
+        return false;
+    }
+    return true;
+}
+
 bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
 {
     const auto *nativeMessage = static_cast<MSG *>(message);
+    if (nativeMessage != nullptr) {
+        if (nativeMessage->message == WM_DWMSENDICONICTHUMBNAIL) {
+            const QSize maximumSize(HIWORD(nativeMessage->lParam), LOWORD(nativeMessage->lParam));
+            if (publishTaskbarBackground(maximumSize, false)) {
+                *result = 0;
+                return true;
+            }
+        } else if (nativeMessage->message == WM_DWMSENDICONICLIVEPREVIEWBITMAP) {
+            RECT clientRect{};
+            if (GetClientRect(nativeMessage->hwnd, &clientRect) &&
+                publishTaskbarBackground(QSize(clientRect.right - clientRect.left,
+                                              clientRect.bottom - clientRect.top), true)) {
+                *result = 0;
+                return true;
+            }
+        } else if (nativeMessage->message == WM_DWMCOMPOSITIONCHANGED) {
+            updateTaskbarBackground();
+        }
+    }
     if (nativeMessage != nullptr && m_taskbarCreatedMessage != 0 &&
         nativeMessage->message == m_taskbarCreatedMessage) {
         initializeTaskbarToolbar();

@@ -317,12 +317,25 @@ void MainWindow::rebuildPlaybackQueue()
                 item->setData(Qt::UserRole, song.path);
             }
         }
+        item->setToolTip(QStringLiteral("<qt>%1</qt>").arg(song.title.toHtmlEscaped()));
         if (song.id == selectedId) {
             m_queue->setCurrentItem(item);
         }
     }
+    filterPlaybackQueue();
     m_queue->verticalScrollBar()->setValue(scrollPosition);
     m_queue->setUpdatesEnabled(true);
+}
+
+void MainWindow::filterPlaybackQueue()
+{
+    const QString keyword = m_queueSearchEditor->text().trimmed();
+    // 只隐藏不匹配的行，保留列表索引与实际播放队列的一一对应关系。
+    for (int row = 0; row < m_queue->count(); ++row) {
+        QListWidgetItem *item = m_queue->item(row);
+        item->setHidden(!keyword.isEmpty() &&
+                        !item->text().contains(keyword, Qt::CaseInsensitive));
+    }
 }
 
 void MainWindow::updatePlayingIndicators()

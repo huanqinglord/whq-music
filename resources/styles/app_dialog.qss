@@ -53,6 +53,66 @@ QDialog[appDialog="true"] QLineEdit:focus {
     border-color: #9b90ff;
 }
 
+QDialog#lyricsDownloadDialog QComboBox {
+    color: #f4f5fb;
+    background-color: rgba(255, 255, 255, 18);
+    border: 1px solid rgba(255, 255, 255, 40);
+    border-radius: 8px;
+    padding: 0 30px 0 12px;
+    min-width: 80px;
+    min-height: 36px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+QDialog#lyricsDownloadDialog QComboBox:hover,
+QDialog#lyricsDownloadDialog QComboBox:focus,
+QDialog#lyricsDownloadDialog QComboBox:on {
+    color: #f4f5fb;
+    background-color: rgba(255, 255, 255, 24);
+    border-color: #9b90ff;
+}
+
+QDialog#lyricsDownloadDialog QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 26px;
+    border: none;
+    background: transparent;
+}
+
+QDialog#lyricsDownloadDialog QComboBox::down-arrow {
+    image: url(:/icons/chevron_down.svg);
+    width: 14px;
+    height: 14px;
+}
+
+QDialog#lyricsDownloadDialog QComboBox:disabled {
+    color: #9399af;
+    background-color: rgba(255, 255, 255, 10);
+    border-color: rgba(255, 255, 255, 20);
+}
+
+QDialog#lyricsDownloadDialog QComboBox QAbstractItemView {
+    color: #f4f5fb;
+    background-color: #252736;
+    border: 1px solid #59536f;
+    padding: 4px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+    outline: none;
+}
+
+QDialog#lyricsDownloadDialog QComboBox QAbstractItemView::item {
+    min-height: 30px;
+    padding: 0 8px;
+}
+
+QDialog#lyricsDownloadDialog QComboBox QAbstractItemView::item:selected {
+    color: #ffffff;
+    background-color: #7667f5;
+}
+
 QDialog[appDialog="true"] QTableWidget,
 QDialog[appDialog="true"] QListWidget,
 QDialog[appDialog="true"] QPlainTextEdit {
@@ -75,13 +135,11 @@ QDialog[appDialog="true"] QTableWidget::item {
     border: none;
 }
 
-QDialog[appDialog="true"] #lyricsResultTable::item:hover {
-    background-color: rgba(255, 255, 255, 18);
-}
-
+QDialog[appDialog="true"] #lyricsResultTable::item,
+QDialog[appDialog="true"] #lyricsResultTable::item:hover,
 QDialog[appDialog="true"] #lyricsResultTable::item:selected {
-    color: #ffffff;
-    background-color: rgba(118, 103, 245, 90);
+    color: #f4f5fb;
+    background-color: transparent;
 }
 
 QDialog[appDialog="true"] QListWidget::item {

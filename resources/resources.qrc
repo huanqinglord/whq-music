@@ -3,6 +3,8 @@
         <file>styles/dark.qss</file>
         <file>styles/app_dialog.qss</file>
         <file>icons/check.svg</file>
+        <file>icons/chevron_down.svg</file>
+        <file>icons/chevron_up.svg</file>
         <file>backgrounds/default.png</file>
         <file>backgrounds/tray_icon_background.png</file>
         <file>icons/add_circle.svg</file>

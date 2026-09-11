@@ -44,6 +44,8 @@ qt_add_executable(WhqMusic
     src/app_dialog.h
     src/lyrics_download_dialog.cpp
     src/lyrics_download_dialog.h
+    src/lyric_parser.cpp
+    src/lyric_parser.h
     src/audio_file_editor.cpp
     src/audio_file_editor.h
     src/library_widgets.cpp
@@ -81,7 +83,7 @@ include(cmake/ffmpeg.cmake)
 
 if(WIN32)
     target_sources(WhqMusic PRIVATE resources/app_icon.rc)
-    target_link_libraries(WhqMusic PRIVATE ole32 uuid user32)
+    target_link_libraries(WhqMusic PRIVATE ole32 uuid user32 dwmapi gdi32)
 endif()
 
 target_link_libraries(WhqMusic PRIVATE Qt6::Concurrent Qt6::Multimedia Qt6::Network Qt6::Sql Qt6::Widgets tag)

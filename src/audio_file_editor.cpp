@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSqlDatabase>
+#include <QSqlError>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
@@ -21,6 +22,10 @@
 #include <tag.h>
 #include <tfile.h>
 #include <tpropertymap.h>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace {
 TagLib::FileRef openTags(const QString &path, bool readAudioProperties = false)
@@ -144,8 +149,20 @@ PreparedAudioEdit prepareAudioEdit(const AudioEditRequest &request)
     PreparedAudioEdit prepared;
     prepared.request = request;
     const QFileInfo sourceInfo(request.originalPath);
-    if (!sourceInfo.isFile() || !sourceInfo.isWritable()) {
-        prepared.error = QStringLiteral("歌曲不存在或不可写，原文件未修改。");
+    if (!sourceInfo.isFile()) {
+        prepared.error = QStringLiteral("歌曲文件不存在，保存失败，请刷新音乐库后重试。");
+        return prepared;
+    }
+#ifdef Q_OS_WIN
+    const DWORD attributes = GetFileAttributesW(request.originalPath.toStdWString().c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_READONLY) != 0) {
+        prepared.error = QStringLiteral(
+            "歌曲文件为只读，无法保存歌词或元数据。请在文件属性中取消“只读”后重试，原文件未修改。");
+        return prepared;
+    }
+#endif
+    if (!sourceInfo.isWritable()) {
+        prepared.error = QStringLiteral("歌曲文件没有写入权限，保存失败，原文件未修改。");
         return prepared;
     }
     const bool rename = normalizedPath(request.originalPath) != normalizedPath(request.targetPath);
@@ -352,13 +369,28 @@ AudioEditResult commitAudioEdit(const PreparedAudioEdit &prepared)
                     for (const QJsonValue &artist : artists) {
                         names.append(artist.toString());
                     }
-                    query.addBindValue(names.join(QStringLiteral(" / ")));
+                    // 无 ARTIST 标签的歌曲也能保存歌词，不能向非空字段写入 SQL NULL。
+                    const QString artist = names.join(QStringLiteral(" / "));
+                    query.addBindValue(artist.isNull() ? QStringLiteral("") : artist);
                     query.addBindValue(request.targetPath);
                     query.addBindValue(prepared.updatedHash);
                     query.addBindValue(QString::fromUtf8(
                         QJsonDocument(prepared.metadata).toJson(QJsonDocument::Compact)));
                     query.addBindValue(request.originalPath);
-                    return query.exec() && query.numRowsAffected() == 1;
+                    if (!query.exec()) {
+                        qWarning() << "Failed to persist audio edit, lyrics only:"
+                                   << request.lyricsOnly
+                                   << "database error:" << query.lastError().databaseText()
+                                   << "code:" << query.lastError().nativeErrorCode();
+                        return false;
+                    }
+                    if (query.numRowsAffected() != 1) {
+                        qWarning() << "Audio edit record mismatch, lyrics only:"
+                                   << request.lyricsOnly
+                                   << "affected rows:" << query.numRowsAffected();
+                        return false;
+                    }
+                    return true;
                 },
                 error);
             if (!saved) {
@@ -366,6 +398,9 @@ AudioEditResult commitAudioEdit(const PreparedAudioEdit &prepared)
             }
         } else {
             result.message = QStringLiteral("无法更新音乐数据库。");
+            qWarning() << "Failed to open audio edit database:"
+                       << database.lastError().databaseText()
+                       << "code:" << database.lastError().nativeErrorCode();
         }
         database.close();
     }

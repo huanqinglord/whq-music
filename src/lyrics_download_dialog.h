@@ -2,6 +2,7 @@
 #define LYRICS_DOWNLOAD_DIALOG_H
 
 #include "app_dialog.h"
+#include "lyric_parser.h"
 
 #include <QElapsedTimer>
 #include <QList>
@@ -43,8 +44,8 @@ private:
         QString lyrics;
         /** 接口中的歌曲时长，单位为秒；负数表示缺失或无效。 */
         double durationSeconds = -1.0;
-        /** 是否包含同步歌词，用于逐句滚动显示和结果优先排序。 */
-        bool synchronized = false;
+        /** 按实际时间数据区分无同步、逐句和逐字。 */
+        Lyrics::Mode mode = Lyrics::Mode::None;
     };
 
     enum class StatusTone
@@ -63,12 +64,13 @@ private:
 
     enum class SearchStage
     {
-        PrimarySearch,
-        BackupSearch,
-        BackupLyrics
+        LrclibSearch,
+        KugouSearch,
+        KugouKrc,
+        KugouLrc
     };
 
-    struct BackupCandidate
+    struct KugouCandidate
     {
         LyricResult result;
         QString id;
@@ -80,12 +82,15 @@ private:
     void finishSearch(QNetworkReply *reply, quint64 generation);
     void sendSearchRequest(const QUrl &url);
     void handleSearchFailure(const QString &reason);
-    void startBackupSearch(const QString &reason, bool noResults = false);
-    void parsePrimaryResults(const QJsonDocument &document);
-    void parseBackupCandidates(const QJsonDocument &document);
-    void parseBackupLyrics(const QJsonDocument &document);
-    void fetchNextBackupLyrics();
-    void finishBackupSearch();
+    void startKugouSearch();
+    void startLrclibSearch();
+    void finishLrclibFailure(const QString &reason, bool noResults = false);
+    void fetchKugouLyrics(bool wordTimed);
+    void parseLrclibResults(const QJsonDocument &document);
+    void parseKugouCandidates(const QJsonDocument &document);
+    void parseKugouLyrics(const QJsonDocument &document);
+    void fetchNextKugouLyrics();
+    void finishKugouSearch();
     void showSearchResults(const QString &source);
     void updateSelection();
     void clearOverwriteConfirmation();
@@ -99,15 +104,13 @@ private:
     QNetworkAccessManager *m_networkManager;
     QPointer<QNetworkReply> m_reply;
     quint64 m_searchGeneration = 0;
-    SearchStage m_searchStage = SearchStage::PrimarySearch;
+    SearchStage m_searchStage = SearchStage::LrclibSearch;
     QElapsedTimer m_sourceElapsed;
     QString m_searchKeyword;
-    QString m_primaryFailure;
-    QString m_backupFailure;
-    bool m_primaryNoResults = false;
-    bool m_backupHadError = false;
-    QList<BackupCandidate> m_backupCandidates;
-    int m_backupCandidateIndex = 0;
+    QString m_kugouFailure;
+    bool m_kugouHadError = false;
+    QList<KugouCandidate> m_kugouCandidates;
+    int m_kugouCandidateIndex = 0;
     QList<LyricResult> m_results;
     int m_pendingOverwriteRow = -1;
     QComboBox *m_sourceSelector = nullptr;

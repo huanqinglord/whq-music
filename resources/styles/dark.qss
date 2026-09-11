@@ -205,6 +205,18 @@ QWidget {
     border-bottom-right-radius: 9px;
 }
 
+#settingsPage QSpinBox::up-arrow {
+    image: url(:/icons/chevron_up.svg);
+    width: 14px;
+    height: 14px;
+}
+
+#settingsPage QSpinBox::down-arrow {
+    image: url(:/icons/chevron_down.svg);
+    width: 14px;
+    height: 14px;
+}
+
 #settingsPage QSpinBox::up-button:hover,
 #settingsPage QSpinBox::down-button:hover {
     background-color: #7667f5;
@@ -284,7 +296,7 @@ QWidget {
 }
 
 #lyricsList {
-    padding: 120px 24px;
+    padding: 0 24px;
     background-color: transparent;
     border: none;
     font-size: 18px;
@@ -356,6 +368,22 @@ QWidget {
 #queueDrawer #sectionLabel {
     font-size: 20px;
     font-weight: 600;
+}
+
+#queueDrawer #queueSearchEditor {
+    color: #eef0f7;
+    background-color: rgba(255, 255, 255, 18);
+    border: 1px solid rgba(255, 255, 255, 40);
+    border-radius: 8px;
+    padding: 0 10px;
+    min-height: 32px;
+    selection-color: #ffffff;
+    selection-background-color: #7667f5;
+}
+
+#queueDrawer #queueSearchEditor:focus {
+    background-color: rgba(255, 255, 255, 24);
+    border-color: #9b90ff;
 }
 
 #queueDrawer #queueList {

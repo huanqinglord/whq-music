@@ -153,7 +153,7 @@ QWidget *MainWindow::createNowPlayingPage()
     songInfoPanel->setLayout(songInfoLayout);
 
     auto *lyricsLayout = new QVBoxLayout;
-    m_lyrics = new QListWidget(this);
+    m_lyrics = new LyricsListWidget(this);
     m_lyrics->setObjectName(QStringLiteral("lyricsList"));
     m_lyrics->setFocusPolicy(Qt::NoFocus);
     m_lyrics->setSelectionMode(QAbstractItemView::NoSelection);

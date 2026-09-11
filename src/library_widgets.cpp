@@ -2,6 +2,7 @@
 #include "music_file_utils.h"
 
 #include <QEvent>
+#include <QHelpEvent>
 #include <QIcon>
 #include <QItemSelectionModel>
 #include <QLineEdit>
@@ -14,6 +15,7 @@
 #include <QStyleOptionViewItem>
 #include <QStyledItemDelegate>
 #include <QTableView>
+#include <QToolTip>
 #include <QUrl>
 #include <QVariant>
 
@@ -235,6 +237,38 @@ void SongTableItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
 QueueItemDelegate::QueueItemDelegate(QListWidget *queue, AudioPlayer *player)
     : QStyledItemDelegate(queue), m_player(player)
 {
+}
+
+bool QueueItemDelegate::helpEvent(QHelpEvent *event, QAbstractItemView *view,
+                                  const QStyleOptionViewItem &option,
+                                  const QModelIndex &index)
+{
+    if (event == nullptr || view == nullptr || !index.isValid() ||
+        event->type() != QEvent::ToolTip) {
+        return QStyledItemDelegate::helpEvent(event, view, option, index);
+    }
+
+    QStyleOptionViewItem rowOption(option);
+    initStyleOption(&rowOption, index);
+    const QUrl source = m_player->source();
+    const bool currentSong =
+        source.isLocalFile() &&
+        normalizedPath(source.toLocalFile()) == normalizedPath(index.data(Qt::UserRole).toString());
+    QRect textRect;
+    // 与实际绘制保持一致：播放行使用粗体和固定留白，普通行由样式决定文本区域。
+    if (currentSong) {
+        rowOption.font.setBold(true);
+        textRect = option.rect.adjusted(12, 0, -12, 0);
+    } else {
+        textRect = view->style()->subElementRect(QStyle::SE_ItemViewItemText, &rowOption, view);
+    }
+    const QString displayedText = QFontMetrics(rowOption.font).elidedText(
+        rowOption.text, Qt::ElideRight, qMax(0, textRect.width()));
+    if (displayedText == rowOption.text) {
+        QToolTip::hideText();
+        return true;
+    }
+    return QStyledItemDelegate::helpEvent(event, view, option, index);
 }
 
 void QueueItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,

@@ -17,10 +17,10 @@ PlaybackController::PlaybackController(AudioPlayer *player, QObject *parent)
       m_audioProgress(std::make_shared<AudioPlaybackProgress>())
 {
     connect(m_player, &AudioPlayer::audioBufferReceived, this,
-            [this](quint64 stream, const QAudioBuffer &buffer) {
-                m_audioProgress->receive(stream, buffer);
-                emit audioBufferReceived(stream, buffer);
-            });
+            [progress = m_audioProgress](quint64 stream, const QAudioBuffer &buffer) {
+                // 统计自带互斥保护；不跨线程访问控制器，销毁期间由共享引用保活。
+                progress->receive(stream, buffer);
+            }, Qt::DirectConnection);
     m_errorProgressTimer->setSingleShot(true);
     m_errorProgressTimer->setInterval(1500);
     connect(m_errorProgressTimer, &QTimer::timeout, this,

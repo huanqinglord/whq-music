@@ -5,9 +5,11 @@
 #include "audio_player.h"
 #include "music_types.h"
 #include "audio_file_editor.h"
+#include "lyric_parser.h"
 
 #include <QFuture>
 #include <QHash>
+#include <QImage>
 #include <QMainWindow>
 #include <QSqlDatabase>
 
@@ -83,6 +85,10 @@ private:
     void restoreFromTray();
     void initializeTaskbarToolbar();
     void updateTaskbarToolbar();
+    void updateTaskbarBackground();
+#ifdef Q_OS_WIN
+    bool publishTaskbarBackground(const QSize &maximumSize, bool livePreview);
+#endif
     bool initializeDatabase();
     void loadGroups();
     void loadSongs(bool reloadLibrary = true);
@@ -120,6 +126,8 @@ private:
     void cyclePlayMode();
     void playNext(bool automatic = false);
     void chooseBackground();
+    void applyBackground(const QString &path);
+    quint64 m_backgroundUpdateGeneration = 0;
     void showSettings();
     void applyFonts(const QString &applicationFont, int applicationFontSize,
                     const QString &lyricsFont, int lyricsFontSize);
@@ -129,6 +137,7 @@ private:
     void updateLyricsScriptButtonPalette(const QString &backgroundPath);
     void updateCaptionButtonPalette(const QString &backgroundPath);
     void toggleQueueDrawer();
+    void filterPlaybackQueue();
     void updateQueueDrawerGeometry();
     QRect queueDrawerRect(bool open) const;
     void updateSongInfoPalette(const QString &backgroundPath);
@@ -172,6 +181,8 @@ private:
     unsigned int m_taskbarCreatedMessage = 0;
     bool m_taskbarButtonsAdded = false;
     bool m_taskbarComInitialized = false;
+    QImage m_taskbarBackground;
+    QString m_taskbarBackgroundPath;
 #endif
     AudioPlayer *m_player = nullptr;
     MetadataScanner *m_metadataScanner = nullptr;
@@ -212,6 +223,7 @@ private:
     QMenu *m_audioEffectMenu = nullptr;
     QLineEdit *m_backgroundEditor = nullptr;
     QLineEdit *m_searchEditor = nullptr;
+    QLineEdit *m_queueSearchEditor = nullptr;
     QTimer *m_searchTimer = nullptr;
     QTimer *m_volumeSaveTimer = nullptr;
     QTimer *m_lyricsScrollTimer = nullptr;
@@ -231,7 +243,7 @@ private:
     int m_fileSizeGeneration = 0;
     bool m_libraryImportInProgress = false;
     bool m_playbackErrorShown = false;
-    QList<QPair<qint64, QString>> m_lyricLines;
+    QList<Lyrics::Line> m_lyricLines;
     QString m_missingLyricsAudioPath;
     QString m_backgroundPath;
     QString m_baseStyleSheet;

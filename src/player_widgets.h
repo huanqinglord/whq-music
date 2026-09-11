@@ -2,6 +2,7 @@
 #define PLAYER_WIDGETS_H
 
 #include "music_types.h"
+#include "lyric_parser.h"
 
 #include <QAbstractTableModel>
 #include <QCache>
@@ -10,6 +11,7 @@
 #include <QIcon>
 #include <QImage>
 #include <QLabel>
+#include <QListWidget>
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
@@ -21,7 +23,6 @@
 #include <functional>
 
 class QLineEdit;
-class QListWidget;
 class QMediaMetaData;
 class AudioPlayer;
 class QMenu;
@@ -30,6 +31,7 @@ namespace PlayerWidgets {
 
 QImage loadScaledImage(const QString &path, const QSize &bounds);
 QImage backgroundSample(const QString &path);
+void cacheBackgroundSample(const QString &path, const QImage &image);
 inline const QString kDefaultBackgroundPath = QStringLiteral(":/backgrounds/default.png");
 
 QString styleSheetWithFontSizes(const QString &baseStyleSheet, int applicationFontSize,
@@ -139,6 +141,9 @@ public:
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
 
+    bool helpEvent(QHelpEvent *event, QAbstractItemView *view,
+                   const QStyleOptionViewItem &option, const QModelIndex &index) override;
+
 private:
     AudioPlayer *m_player;
 };
@@ -156,12 +161,29 @@ private:
     QMenu *m_menu;
 };
 
+class LyricsListWidget final : public QListWidget
+{
+public:
+    explicit LyricsListWidget(QWidget *parent = nullptr);
+
+    void scrollTo(const QModelIndex &index, ScrollHint hint = EnsureVisible) override;
+
+protected:
+    void updateGeometries() override;
+};
+
 class LyricsItemDelegate final : public QStyledItemDelegate
 {
 public:
     explicit LyricsItemDelegate(QObject *parent = nullptr);
 
     bool setScrollProgress(qreal progress);
+
+    bool setFillProgress(qreal progress);
+
+    qreal wordFillProgress(const Lyrics::Line &line, qint64 position) const;
+
+    void prepareLine(const Lyrics::Line &line) const;
 
     bool needsHorizontalScroll(const QModelIndex &index, int width) const;
 
@@ -175,15 +197,32 @@ public:
 private:
     qreal backgroundLuminance(const QRect &itemRect) const;
 
+    QRect backgroundSampleRect(const QRect &itemRect) const;
+
+    QList<QColor> activeLyricsColors(const QFont &font) const;
+
     QPainterPath textOutline(const QString &text, const QFont &font) const;
 
     mutable QCache<QString, QPainterPath> m_textOutlines{1024 * 1024};
     qreal m_scrollProgress = 0.0;
+    qreal m_fillProgress = 0.0;
+    struct WordLayout
+    {
+        QList<qreal> cursorPositions;
+        QRectF textBounds;
+    };
+
+    // 保留多句排版，预热下一句不会驱逐当前句，往回跳转也可复用。
+    mutable QCache<QString, WordLayout> m_wordLayouts{8};
     QList<QColor> m_colors;
     bool m_darkBackground = true;
     QImage m_background;
     mutable QImage m_sampledBackground;
     mutable QSize m_sampledSurfaceSize;
+    mutable QRect m_activeSampleRect;
+    mutable QString m_activeFontKey;
+    mutable QSize m_activeBandSize;
+    mutable QList<QColor> m_activeColors;
 };
 
 class ImmediateToolTipFilter final : public QObject
@@ -324,8 +363,7 @@ private:
 
     QTimer m_backgroundResizeTimer;
     QString m_backgroundPath;
-    QSize m_backgroundSourceSize;
-    QPixmap m_background;
+    quint64 m_backgroundGeneration = 0;
     QPixmap m_sharpBackground;
     QPixmap m_blurredBackground;
     QColor m_edgeColor = QColor(QStringLiteral("#0b0d14"));

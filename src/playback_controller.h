@@ -63,7 +63,6 @@ signals:
     void outputPauseRequested(bool paused);
     void playbackActivityChanged();
     void audioStreamChanged(quint64 stream);
-    void audioBufferReceived(quint64 stream, const QAudioBuffer &buffer);
 
 private:
     int indexOf(qint64 songId) const;

@@ -223,10 +223,14 @@ bool MusicLibraryRepository::saveArtist(qint64 songId, const QString &artist, bo
     QSqlQuery query(m_database);
     query.prepare(onlyEmpty ? QStringLiteral("UPDATE songs SET artist=? WHERE id=? AND artist=''")
                             : QStringLiteral("UPDATE songs SET artist=? WHERE id=?"));
-    query.addBindValue(artist);
+    // 缺少歌手时写入空字符串，避免空 QString 被绑定为 SQL NULL。
+    query.addBindValue(artist.isNull() ? QStringLiteral("") : artist);
     query.addBindValue(songId);
     if (!query.exec()) {
         error = QStringLiteral("无法保存歌曲歌手信息。");
+        qWarning() << "Failed to update song artist, song:" << songId
+                   << "database error:" << query.lastError().databaseText()
+                   << "code:" << query.lastError().nativeErrorCode();
         return false;
     }
     return query.numRowsAffected() == 1;
@@ -240,11 +244,16 @@ bool MusicLibraryRepository::saveArtistScan(qint64 songId, const QString &artist
     query.prepare(QStringLiteral(
         "UPDATE songs SET artist=CASE WHEN artist='' THEN ? ELSE artist END,"
         "artist_scan_state=? WHERE id=?"));
-    query.addBindValue(artist);
+    // 无歌手信息也是有效扫描结果，artist 字段不允许 SQL NULL。
+    query.addBindValue(artist.isNull() ? QStringLiteral("") : artist);
     query.addBindValue(static_cast<int>(state));
     query.addBindValue(songId);
     if (!query.exec()) {
         error = QStringLiteral("无法保存歌曲扫描结果。");
+        qWarning() << "Failed to persist artist scan, song:" << songId
+                   << "state:" << static_cast<int>(state)
+                   << "database error:" << query.lastError().databaseText()
+                   << "code:" << query.lastError().nativeErrorCode();
         return false;
     }
     return query.numRowsAffected() == 1;

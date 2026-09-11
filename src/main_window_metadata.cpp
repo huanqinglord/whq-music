@@ -22,7 +22,6 @@
 #include <QMediaPlayer>
 #include <QMessageBox>
 #include <QPalette>
-#include <QProgressDialog>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSet>
@@ -54,23 +53,10 @@ void MainWindow::editSongMetadata(qint64 songId)
     const QString originalPath = songQuery.value(0).toString();
     songQuery.finish();
     m_metadataReadInProgress = true;
-    auto *progress = new QProgressDialog(QStringLiteral("正在读取歌曲信息…"),
-                                         QStringLiteral("取消"), 0, 0, this);
-    progress->setWindowTitle(QStringLiteral("读取歌曲"));
-    progress->setWindowModality(Qt::WindowModal);
-    progress->setAutoClose(false);
-    progress->setAutoReset(false);
-    progress->show();
     auto *watcher = new QFutureWatcher<AudioMetadataSnapshot>(this);
-    connect(progress, &QProgressDialog::canceled, watcher,
-            &QFutureWatcher<AudioMetadataSnapshot>::cancel);
     connect(watcher, &QFutureWatcher<AudioMetadataSnapshot>::finished, this,
-            [this, watcher, progress] {
-                // 程序关闭进度窗口不代表用户取消，先断开该连接再关闭。
-                disconnect(progress, nullptr, watcher, nullptr);
+            [this, watcher] {
                 m_metadataReadInProgress = false;
-                progress->close();
-                progress->deleteLater();
                 if (watcher->isCanceled()) {
                     watcher->deleteLater();
                     return;
@@ -305,15 +291,7 @@ void MainWindow::showMetadataEditor(const AudioMetadataSnapshot &snapshot)
     request.databasePath = m_database.databaseName();
     request.expectedHash = originalHash;
     request.properties = metadataJson;
-    auto *progress = new QProgressDialog(QStringLiteral("正在保存歌曲信息…"), {}, 0, 0, this);
-    progress->setWindowTitle(QStringLiteral("保存歌曲"));
-    progress->setWindowModality(Qt::ApplicationModal);
-    progress->setCancelButton(nullptr);
-    progress->setAutoClose(false);
-    progress->show();
-    startAudioFileEdit(request, [this, progress](const AudioEditResult &result, bool) {
-        progress->close();
-        progress->deleteLater();
+    startAudioFileEdit(request, [this](const AudioEditResult &result, bool) {
         if (!result.success) {
             QMessageBox::warning(this, QStringLiteral("保存失败"), result.message);
         } else if (!result.warning.isEmpty()) {
