@@ -10,6 +10,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMediaPlayer>
+#include <QMenu>
 #include <QPalette>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -175,6 +176,22 @@ QWidget *MainWindow::createNowPlayingPage()
         updateCaptionButtonPalette(m_backgroundPath);
     });
     lyricsHeaderLayout->addWidget(m_lyricsScriptButton);
+    m_desktopLyricsButton = new LyricsScriptButton(this);
+    m_desktopLyricsButton->setText(QStringLiteral("桌"));
+    m_desktopLyricsButton->setObjectName(QStringLiteral("desktopLyricsButton"));
+    m_desktopLyricsButton->setToolTip(QStringLiteral("桌面歌词"));
+    m_desktopLyricsButton->setAccessibleName(QStringLiteral("桌面歌词"));
+    m_desktopLyricsButton->setCheckable(true);
+    m_desktopLyricsButton->setContextMenuPolicy(Qt::CustomContextMenu);
+    lyricsHeaderLayout->addWidget(m_desktopLyricsButton);
+    connect(m_desktopLyricsButton, &QPushButton::clicked, this, &MainWindow::toggleDesktopLyrics);
+    connect(m_desktopLyricsButton, &QPushButton::customContextMenuRequested, this,
+            [this](const QPoint &position) {
+                QMenu menu(this);
+                menu.addAction(QStringLiteral("显示 / 隐藏桌面歌词"), this,
+                               &MainWindow::toggleDesktopLyrics);
+                menu.exec(m_desktopLyricsButton->mapToGlobal(position));
+            });
     lyricsLayout->addLayout(lyricsHeaderLayout);
     lyricsLayout->addWidget(m_lyrics, 1);
     auto *lyricsPanel = new QWidget(this);

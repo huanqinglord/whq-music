@@ -42,6 +42,7 @@ void MainWindow::loadLyrics(const QString &audioPath)
     m_currentLyricIndex = -1;
     m_missingLyricsAudioPath.clear();
     m_lyrics->clear();
+    updateDesktopLyrics();
     const QString synchronizedLyrics = embeddedLyrics(audioPath, true);
     if (loadTimestampedLyrics(synchronizedLyrics)) {
         return;
@@ -215,6 +216,7 @@ bool MainWindow::loadTimestampedLyrics(const QString &content)
         // 等列表完成初始布局，再按当前播放位置定位，前奏期间也显示居中的首句。
         m_lyricsScrollTimer->start(0);
     }
+    updateDesktopLyrics();
     return true;
 }
 
@@ -259,10 +261,12 @@ void MainWindow::showPlainLyrics(const QString &content)
         item->setTextAlignment(Qt::AlignCenter);
         m_lyrics->addItem(item);
     }
+    updateDesktopLyrics();
 }
 
 void MainWindow::updateLyrics(qint64 position)
 {
+    updateDesktopLyrics();
     if (m_lyricsScrollTimer == nullptr) {
         return;
     }

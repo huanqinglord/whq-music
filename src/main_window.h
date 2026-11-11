@@ -41,6 +41,8 @@ struct ITaskbarList3;
 class MusicLibraryRepository;
 class PlaybackController;
 class MetadataScanner;
+class ShortcutManager;
+class DesktopLyricsWindow;
 
 namespace PlayerWidgets {
 class SongTableModel;
@@ -77,6 +79,11 @@ private:
     QWidget *createLibraryPage();
     QWidget *createNowPlayingPage();
     QWidget *createSettingsPage();
+    QWidget *createShortcutSettingsPage();
+    void initializeShortcuts();
+    void initializeDesktopLyrics();
+    void toggleDesktopLyrics();
+    void updateDesktopLyrics();
     void createPlayerBar();
     void initializePlayback();
     void connectLibraryControls();
@@ -168,6 +175,10 @@ private:
 
     QSqlDatabase m_database;
     std::unique_ptr<MusicLibraryRepository> m_repository;
+    ShortcutManager *m_shortcutManager = nullptr;
+    DesktopLyricsWindow *m_desktopLyrics = nullptr;
+    QTimer *m_desktopLyricsTimer = nullptr;
+    int m_volumeBeforeMute = 70;
     PlaybackController *m_playbackController = nullptr;
     QSystemTrayIcon *m_trayIcon = nullptr;
     QLabel *m_traySongLabel = nullptr;
@@ -175,6 +186,7 @@ private:
     QPushButton *m_trayPlayButton = nullptr;
     QPushButton *m_trayNextButton = nullptr;
     QPushButton *m_trayModeButton = nullptr;
+    QPushButton *m_trayDesktopLyricsButton = nullptr;
     bool m_exitRequested = false;
 #ifdef Q_OS_WIN
     ITaskbarList3 *m_taskbar = nullptr;
@@ -210,6 +222,7 @@ private:
     QPushButton *m_modeButton = nullptr;
     QPushButton *m_refreshLibraryButton = nullptr;
     QPushButton *m_lyricsScriptButton = nullptr;
+    QPushButton *m_desktopLyricsButton = nullptr;
     QPushButton *m_audioEffectButton = nullptr;
     QPushButton *m_queueButton = nullptr;
     QPushButton *m_maximizeButton = nullptr;

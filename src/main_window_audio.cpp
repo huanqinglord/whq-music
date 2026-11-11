@@ -38,6 +38,16 @@ void MainWindow::initializePlayback()
     });
     connect(m_playbackController, &PlaybackController::playbackFailed, this,
             &MainWindow::reportPlaybackError);
+    connect(m_playbackController, &PlaybackController::songFileMissing, this,
+            [this](const Song &song) {
+                QString error;
+                if (!m_repository->deleteSong(song.id, error)) {
+                    qWarning().noquote() << "Failed to delete missing song from library:"
+                                        << song.id << error;
+                    return;
+                }
+                loadSongs();
+            });
     connect(m_playbackController, &PlaybackController::queueChanged, this, [this] {
         rebuildPlaybackQueue();
         updateTaskbarToolbar();

@@ -408,6 +408,23 @@ qreal LyricsItemDelegate::backgroundLuminance(const QRect &itemRect) const
     return samples > 0 ? luminance / samples : (m_darkBackground ? 0.2 : 0.8);
 }
 
+QList<QColor> LyricsItemDelegate::displayColors() const
+{
+    const auto *lyrics = qobject_cast<const QListWidget *>(parent());
+    QFont font = lyrics != nullptr ? lyrics->font() : QFont();
+    font.setBold(true);
+    if (font.pixelSize() > 0) {
+        font.setPixelSize(qRound(font.pixelSize() * 1.35));
+    } else {
+        font.setPointSizeF(font.pointSizeF() * 1.35);
+    }
+    QList<QColor> colors = activeLyricsColors(font);
+    const QRect area = lyrics != nullptr ? lyrics->viewport()->rect() : QRect(0, 0, 1, 1);
+    const bool locallyDark = backgroundLuminance(area) < 0.52;
+    colors.append(locallyDark ? QColor(248, 249, 255, 225) : QColor(17, 19, 27, 225));
+    return colors;
+}
+
 QList<QColor> LyricsItemDelegate::activeLyricsColors(const QFont &font) const
 {
     const auto *lyrics = qobject_cast<const QListWidget *>(parent());
@@ -503,7 +520,13 @@ void LyricsScriptButton::paintEvent(QPaintEvent *)
         painter.fillRect(rect(), QColor(20, 22, 30, 150));
     }
     painter.fillRect(rect(), m_hovered ? QColor(255, 255, 255, 42) : QColor(8, 10, 16, 30));
+    if (isChecked()) {
+        painter.fillRect(rect(), QColor(118, 103, 245, 85));
+    }
     painter.setPen(QColor(255, 255, 255, m_hovered ? 76 : 48));
+    if (isChecked()) {
+        painter.setPen(QColor(175, 162, 255, 190));
+    }
     painter.drawRect(rect().adjusted(0, 0, -1, -1));
 
     QFont buttonFont = font();

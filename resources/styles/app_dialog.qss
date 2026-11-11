@@ -195,6 +195,12 @@ QDialog[appDialog="true"] QTableWidget QLineEdit {
     selection-background-color: #7667f5;
 }
 
+QDialog#metadataDialog #metadataTable QLineEdit,
+QDialog#metadataDialog #metadataTable QLineEdit:focus {
+    background-color: #303247;
+    border-radius: 0;
+}
+
 QDialog[appDialog="true"] QPushButton#primaryDialogButton {
     color: #ffffff;
     background-color: #7667f5;

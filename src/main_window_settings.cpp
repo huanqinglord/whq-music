@@ -12,35 +12,72 @@
 #include <QListWidget>
 #include <QPropertyAnimation>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSequentialAnimationGroup>
 #include <QSizePolicy>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QVariant>
 
 using namespace PlayerWidgets;
+
+namespace {
+
+class SettingsTabs final : public QTabWidget
+{
+public:
+    explicit SettingsTabs(QWidget *parent) : QTabWidget(parent)
+    {
+        setMaximumWidth(840);
+    }
+
+    QSize sizeHint() const override
+    {
+        // Both pages share the same preferred width instead of their own content widths.
+        QSize preferred = QTabWidget::sizeHint();
+        preferred.setWidth(840);
+        return preferred;
+    }
+};
+
+} // namespace
 
 QWidget *MainWindow::createSettingsPage()
 {
     auto *settingsPage = new QWidget(this);
     settingsPage->setObjectName(QStringLiteral("settingsPage"));
     auto *settingsPageLayout = new QVBoxLayout(settingsPage);
-    settingsPageLayout->setContentsMargins(48, 42, 48, 32);
-    auto *settingsPanel = new QWidget(settingsPage);
+    settingsPageLayout->setContentsMargins(48, 24, 48, 32);
+    auto *settingsTabs = new SettingsTabs(settingsPage);
+    settingsTabs->setObjectName(QStringLiteral("settingsTabs"));
+    settingsPageLayout->addWidget(settingsTabs, 1, Qt::AlignHCenter);
+    const auto addScrollableTab = [settingsTabs](QWidget *content, const QString &title) {
+        auto *scroll = new QScrollArea(settingsTabs);
+        scroll->setObjectName(QStringLiteral("settingsScroll"));
+        scroll->viewport()->setObjectName(QStringLiteral("settingsScrollViewport"));
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        auto *container = new QWidget;
+        container->setObjectName(QStringLiteral("settingsTabContent"));
+        auto *layout = new QVBoxLayout(container);
+        layout->setContentsMargins(0, 22, 12, 12);
+        layout->addWidget(content, 0, Qt::AlignTop);
+        layout->addStretch();
+        scroll->setWidget(container);
+        settingsTabs->addTab(scroll, title);
+    };
+    auto *settingsPanel = new QWidget;
     settingsPanel->setObjectName(QStringLiteral("settingsPanel"));
     settingsPanel->setMaximumWidth(820);
     settingsPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto *settingsContentLayout = new QVBoxLayout(settingsPanel);
     settingsContentLayout->setContentsMargins(0, 0, 0, 0);
     settingsContentLayout->setSpacing(24);
-    auto *settingsTitle = new QLabel(QStringLiteral("设置"), settingsPanel);
-    settingsTitle->setObjectName(QStringLiteral("pageTitle"));
     auto *restoreSettingsButton = new QPushButton(QStringLiteral("恢复默认"), settingsPanel);
     restoreSettingsButton->setObjectName(QStringLiteral("ghostButton"));
-    auto *settingsHeader = new QHBoxLayout;
-    settingsHeader->addWidget(settingsTitle);
-    settingsHeader->addStretch();
-    settingsHeader->addWidget(restoreSettingsButton, 0, Qt::AlignVCenter);
 
     auto *fontColumns = new QHBoxLayout;
     fontColumns->setSpacing(28);
@@ -102,6 +139,7 @@ QWidget *MainWindow::createSettingsPage()
     backgroundSectionLayout->addWidget(backgroundRow);
 
     auto *settingsActions = new QHBoxLayout;
+    settingsActions->addWidget(restoreSettingsButton);
     settingsActions->addStretch();
     auto *settingsSuccessMessage = new QLabel(QStringLiteral("应用成功"), settingsPanel);
     settingsSuccessMessage->setObjectName(QStringLiteral("settingsSuccessMessage"));
@@ -122,12 +160,11 @@ QWidget *MainWindow::createSettingsPage()
     settingsActions->addWidget(settingsSuccessMessage, 0, Qt::AlignVCenter);
     settingsActions->addSpacing(10);
     settingsActions->addWidget(applySettingsButton);
-    settingsContentLayout->addLayout(settingsHeader);
     settingsContentLayout->addLayout(fontColumns);
     settingsContentLayout->addWidget(backgroundSection);
     settingsContentLayout->addLayout(settingsActions);
-    settingsPageLayout->addWidget(settingsPanel, 0, Qt::AlignHCenter | Qt::AlignTop);
-    settingsPageLayout->addStretch(1);
+    addScrollableTab(settingsPanel, QStringLiteral("通用设置"));
+    addScrollableTab(createShortcutSettingsPage(), QStringLiteral("快捷键设置"));
 
     const auto updateSettingsPreview = [this, applicationPreview, lyricsPreview] {
         QFont applicationPreviewFont = applicationPreview->font();

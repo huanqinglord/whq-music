@@ -27,12 +27,57 @@
 #include <QSet>
 #include <QSizePolicy>
 #include <QSqlQuery>
+#include <QStyledItemDelegate>
 #include <QTableWidget>
+#include <QTimer>
 #include <QVariant>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
 using namespace PlayerWidgets;
+
+namespace {
+
+class MetadataValueDelegate final : public QStyledItemDelegate
+{
+public:
+    explicit MetadataValueDelegate(QObject *parent) : QStyledItemDelegate(parent)
+    {
+    }
+
+    void setEditorData(QWidget *editor, const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::setEditorData(editor, index);
+        auto *lineEdit = qobject_cast<QLineEdit *>(editor);
+        if (lineEdit == nullptr) {
+            return;
+        }
+        if (index.data(Qt::UserRole + 1).toBool()) {
+            lineEdit->clear();
+        }
+        lineEdit->selectAll();
+        // 等进入编辑的鼠标事件处理完再全选，避免点击将选区取消。
+        // 键盘直接输入已经改动内容时，保留输入后的光标和选区。
+        QTimer::singleShot(0, lineEdit, [lineEdit] {
+            if (!lineEdit->isModified()) {
+                lineEdit->selectAll();
+            }
+        });
+    }
+
+protected:
+    void initStyleOption(QStyleOptionViewItem *option,
+                         const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::initStyleOption(option, index);
+        // 编辑框覆盖单元格时只绘制背景，避免两层文字叠加。
+        if (option->state.testFlag(QStyle::State_Editing)) {
+            option->text.clear();
+        }
+    }
+};
+
+} // namespace
 
 void MainWindow::editSongMetadata(qint64 songId)
 {
@@ -133,6 +178,7 @@ void MainWindow::showMetadataEditor(const AudioMetadataSnapshot &snapshot)
     auto *metadataTable = new QTableWidget(&dialog);
     metadataTable->setObjectName(QStringLiteral("metadataTable"));
     metadataTable->setColumnCount(2);
+    metadataTable->setItemDelegateForColumn(1, new MetadataValueDelegate(metadataTable));
     metadataTable->setHorizontalHeaderLabels(
         {QStringLiteral("元数据字段"), QStringLiteral("值（多个值用分号分隔）")});
     metadataTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -214,16 +260,6 @@ void MainWindow::showMetadataEditor(const AudioMetadataSnapshot &snapshot)
                 }
                 item->setData(Qt::UserRole + 1, false);
                 item->setForeground(metadataTable->palette().color(QPalette::Text));
-            });
-    connect(metadataTable, &QTableWidget::cellDoubleClicked, &dialog,
-            [metadataTable](int row, int column) {
-                if (column != 1) {
-                    return;
-                }
-                QTableWidgetItem *item = metadataTable->item(row, column);
-                if (item != nullptr && item->data(Qt::UserRole + 1).toBool()) {
-                    item->setText({});
-                }
             });
     layout->addWidget(metadataTable, 1);
     auto *detailsToggle = new QPushButton(QStringLiteral("▸ 文件详情"), &dialog);

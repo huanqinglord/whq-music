@@ -77,6 +77,10 @@ void MainWindow::updateLyricsScriptButtonPalette(const QString &backgroundPath)
     auto *button = static_cast<LyricsScriptButton *>(m_lyricsScriptButton);
     const auto *surface = static_cast<AppSurface *>(centralWidget());
     button->setBlurredBackground(surface->blurredRegion(button), textColor);
+    if (m_desktopLyricsButton != nullptr) {
+        auto *desktopButton = static_cast<LyricsScriptButton *>(m_desktopLyricsButton);
+        desktopButton->setBlurredBackground(surface->blurredRegion(desktopButton), textColor);
+    }
 }
 
 void MainWindow::updateCaptionButtonPalette(const QString &backgroundPath)

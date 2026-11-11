@@ -58,6 +58,7 @@ signals:
     void songStarted(const Song &song);
     void cleared();
     void playbackFailed(const QString &message);
+    void songFileMissing(const Song &song);
     void naturalEndRequested(quint64 request);
     void outputResetRequested();
     void outputPauseRequested(bool paused);
@@ -68,6 +69,7 @@ private:
     int indexOf(qint64 songId) const;
     void beginAttempts(const QList<qint64> &ids, int historyTarget = -1);
     void tryNext();
+    bool skipMissingSong();
     void acceptPlayingSong();
     void restoreWhenReady();
     void recoverWhenReady();

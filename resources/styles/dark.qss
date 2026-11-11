@@ -134,6 +134,127 @@ QWidget {
     border: none;
 }
 
+#settingsTabs::pane {
+    background-color: transparent;
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 30);
+}
+
+#settingsTabs QTabBar::tab {
+    min-width: 96px;
+    padding: 12px 18px;
+    margin-right: 12px;
+    color: #ffffff;
+    background-color: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+}
+
+#settingsTabs QTabBar::tab:selected {
+    color: #ffffff;
+    background-color: rgba(139, 127, 255, 38);
+    border-bottom-color: #9b90ff;
+    font-weight: 600;
+}
+
+#settingsTabs QTabBar::tab:hover {
+    color: #ffffff;
+    background-color: rgba(139, 127, 255, 18);
+}
+
+#settingsScroll,
+#settingsScrollViewport,
+#settingsTabContent,
+#shortcutSettingsPanel {
+    background-color: transparent;
+    border: none;
+}
+
+#settingsDescription {
+    color: #ffffff;
+    font-size: 14px;
+}
+
+#shortcutSettingsPanel QLineEdit#shortcutKeyEditor {
+    min-height: 38px;
+    color: #ffffff;
+    background-color: rgba(18, 21, 31, 178);
+    border: 1px solid rgba(255, 255, 255, 58);
+    border-radius: 9px;
+    padding: 0 10px;
+}
+
+#shortcutSettingsPanel QLineEdit#shortcutKeyEditor[recording="true"] {
+    background-color: rgba(65, 51, 110, 225);
+    border: 2px solid #b4aaff;
+    padding: 0 9px;
+}
+
+#shortcutSettingsPanel QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    background-color: rgba(18, 21, 31, 178);
+    border: 1px solid #656c82;
+    border-radius: 5px;
+}
+
+#shortcutSettingsPanel QCheckBox::indicator:hover {
+    border-color: #a69cff;
+}
+
+#shortcutSettingsPanel QCheckBox::indicator:checked {
+    image: url(:/icons/check.svg);
+    background-color: #7667f5;
+    border-color: #9b90ff;
+}
+
+#shortcutStatus {
+    padding: 6px 10px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #aeb3c7;
+    background-color: rgba(174, 179, 199, 20);
+    border: 1px solid rgba(174, 179, 199, 42);
+}
+
+#shortcutStatus[state="active"] {
+    color: #79d99a;
+    background-color: rgba(64, 174, 108, 24);
+    border-color: rgba(121, 217, 154, 65);
+}
+
+#shortcutStatus[state="occupied"] {
+    color: #ff969f;
+    background-color: rgba(218, 73, 91, 24);
+    border-color: rgba(255, 150, 159, 65);
+}
+
+#shortcutStatus[state="failed"] {
+    color: #f1bc77;
+    background-color: rgba(219, 153, 62, 24);
+    border-color: rgba(241, 188, 119, 65);
+}
+
+#shortcutRetryButton {
+    min-height: 30px;
+    padding: 0 10px;
+    color: #ddd6ff;
+    background-color: rgba(139, 127, 255, 24);
+    border: 1px solid rgba(164, 151, 255, 70);
+    border-radius: 8px;
+}
+
+#shortcutRetryButton:hover {
+    color: #ffffff;
+    background-color: rgba(139, 127, 255, 65);
+    border-color: #a99cff;
+}
+
+#shortcutRetryButton:pressed {
+    background-color: rgba(118, 103, 245, 100);
+}
+
 #settingsPanel QLabel {
     color: #f5f6ff;
 }
@@ -173,9 +294,33 @@ QWidget {
     border-color: #8b7fff;
 }
 
+#settingsPage QComboBox {
+    padding-right: 46px;
+}
+
 #settingsPage QComboBox::drop-down {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
     width: 34px;
+    background-color: rgba(118, 103, 245, 105);
     border: none;
+    border-left: 1px solid rgba(196, 190, 255, 120);
+    border-top-right-radius: 9px;
+    border-bottom-right-radius: 9px;
+}
+
+#settingsPage QComboBox::down-arrow {
+    image: url(:/icons/chevron_down.svg);
+    width: 14px;
+    height: 14px;
+}
+
+#settingsPage QComboBox::drop-down:hover {
+    background-color: #7667f5;
+}
+
+#settingsPage QComboBox::drop-down:pressed {
+    background-color: #5549bd;
 }
 
 #settingsPage QSpinBox {
@@ -257,7 +402,8 @@ QWidget {
     border-radius: 0;
 }
 
-#lyricsScriptButton {
+#lyricsScriptButton,
+#desktopLyricsButton {
     min-width: 42px;
     max-width: 42px;
     min-height: 34px;
@@ -271,7 +417,8 @@ QWidget {
     font-weight: 600;
 }
 
-#lyricsScriptButton:hover {
+#lyricsScriptButton:hover,
+#desktopLyricsButton:hover {
     background-color: transparent;
     border: none;
 }

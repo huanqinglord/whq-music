@@ -129,6 +129,7 @@ void MainWindow::clearPlayingSong()
     m_cover->setText(QStringLiteral("♫"));
     m_lyrics->clear();
     m_lyricLines.clear();
+    updateDesktopLyrics();
     m_currentLyricIndex = -1;
     m_missingLyricsAudioPath.clear();
     updatePlayButton();
@@ -208,6 +209,7 @@ void MainWindow::updatePlayButton()
     m_playButton->setAccessibleName(m_playButton->toolTip());
     showIconButtonToolTip(m_playButton, true);
     updateTaskbarToolbar();
+    updateDesktopLyrics();
 }
 
 void MainWindow::updatePlayModeButton()
@@ -223,6 +225,7 @@ void MainWindow::updatePlayModeButton()
     configureIconButton(m_modeButton, icons.at(mode), names.at(mode));
     showIconButtonToolTip(m_modeButton, true);
     updateTaskbarToolbar();
+    updateDesktopLyrics();
 }
 
 void MainWindow::applyAudioEffect(AudioEffectProcessor::Preset preset)

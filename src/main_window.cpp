@@ -3,6 +3,8 @@
 #include "music_library_repository.h"
 #include "playback_controller.h"
 #include "metadata_scanner.h"
+#include "shortcut_manager.h"
+#include "desktop_lyrics_window.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -98,10 +100,22 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     updateSongInfoPalette(background);
     updateDialogTheme(background);
     initializeSystemTray();
+    initializeShortcuts();
+    initializeDesktopLyrics();
 }
 
 MainWindow::~MainWindow()
 {
+    if (m_desktopLyricsTimer != nullptr) {
+        m_desktopLyricsTimer->stop();
+    }
+    if (m_desktopLyrics != nullptr) {
+        m_desktopLyrics->flushConfiguration();
+        delete m_desktopLyrics;
+        m_desktopLyrics = nullptr;
+    }
+    delete m_shortcutManager;
+    m_shortcutManager = nullptr;
     if (m_metadataReadFuture.isRunning()) {
         m_metadataReadFuture.cancel();
         m_metadataReadFuture.waitForFinished();
@@ -230,6 +244,10 @@ void MainWindow::applyFonts(const QString &applicationFont, int applicationFontS
     QToolTip::setFont(toolTipFont);
     const auto widgets = QApplication::allWidgets();
     for (QWidget *widget : widgets) {
+        if (m_desktopLyrics != nullptr &&
+            (widget == m_desktopLyrics || m_desktopLyrics->isAncestorOf(widget))) {
+            continue;
+        }
         if (widget == m_lyrics || m_lyrics->isAncestorOf(widget)) {
             continue;
         }
@@ -248,6 +266,9 @@ void MainWindow::applyFonts(const QString &applicationFont, int applicationFontS
     lyricDisplayFont.setFamily(lyricsFont);
     lyricDisplayFont.setPixelSize(lyricsFontSize);
     m_lyrics->setFont(lyricDisplayFont);
+    if (m_desktopLyrics != nullptr) {
+        m_desktopLyrics->setLyricsFont(lyricDisplayFont);
+    }
 }
 
 void MainWindow::toggleMaximized()

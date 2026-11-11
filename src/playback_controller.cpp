@@ -120,6 +120,9 @@ PlaybackController::PlaybackController(AudioPlayer *player, QObject *parent)
                     }
                     return;
                 }
+                if (skipMissingSong()) {
+                    return;
+                }
                 if (!m_pendingPlaybackError.isEmpty() &&
                     (m_pendingErrorCode != QMediaPlayer::FormatError ||
                      error == QMediaPlayer::FormatError)) {
@@ -334,8 +337,7 @@ void PlaybackController::tryNext()
         m_currentSong = song;
         m_currentId = id;
         QFile file(song.path);
-        if (!QFileInfo(song.path).isFile()) {
-            failPlayback(QStringLiteral("文件不存在或路径已改变，请刷新音乐库后重试。"));
+        if (skipMissingSong()) {
             return;
         }
         if (!file.open(QIODevice::ReadOnly)) {
@@ -359,6 +361,58 @@ void PlaybackController::tryNext()
         return;
     }
     failPlayback(QStringLiteral("播放目标已不在当前列表中，请重新选择歌曲。"));
+}
+
+bool PlaybackController::skipMissingSong()
+{
+    if (m_currentId <= 0 || m_externalEdit || QFileInfo(m_currentSong.path).isFile()) {
+        return false;
+    }
+    const Song missingSong = m_currentSong;
+    const int index = currentIndex();
+    qWarning().noquote() << "Skipping missing song:" << missingSong.id
+                        << "path:" << missingSong.path;
+    resetRecovery();
+    invalidateAudioProgress();
+    const quint64 request = ++m_requestGeneration;
+    m_loadTimeout->stop();
+    m_attemptPending = false;
+    m_recordHistory = false;
+    m_playbackFailed = false;
+    m_attempts.clear();
+    m_tried.clear();
+    m_history.clear();
+    m_historyPosition = -1;
+    m_historyTarget = -1;
+    m_changingSource = true;
+    m_player->stop();
+    m_player->setSource({});
+    m_changingSource = false;
+    emit outputResetRequested();
+    if (index >= 0) {
+        m_queue.removeAt(index);
+        m_removedPosition = index;
+    }
+    m_currentId = 0;
+    m_currentSong = {};
+    // Delete the library record before persisting the updated queue. The database
+    // cascades this deletion to every group membership.
+    emit songFileMissing(missingSong);
+    if (m_queue.isEmpty()) {
+        clear();
+        return true;
+    }
+    emit queueChanged();
+    emit cleared();
+    emit playbackActivityChanged();
+    // Defer source changes out of decoder callbacks and avoid recursion when
+    // several consecutive files are missing. A newer user action cancels this skip.
+    QTimer::singleShot(0, this, [this, request] {
+        if (request == m_requestGeneration) {
+            next(false);
+        }
+    });
+    return true;
 }
 
 void PlaybackController::acceptPlayingSong()
@@ -789,6 +843,9 @@ void PlaybackController::seekTo(qint64 position)
 void PlaybackController::failPlayback(const QString &reason)
 {
     if (m_playbackFailed) {
+        return;
+    }
+    if (skipMissingSong()) {
         return;
     }
     m_playbackFailed = true;

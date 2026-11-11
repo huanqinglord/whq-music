@@ -74,6 +74,14 @@ qt_add_executable(WhqMusic
     src/tray_widgets.cpp
     src/main_window_pages.cpp
     src/main_window_settings.cpp
+    src/main_window_shortcuts.cpp
+    src/main_window_desktop_lyrics.cpp
+    src/desktop_lyrics_window.cpp
+    src/desktop_lyrics_window.h
+    src/shortcut_manager.cpp
+    src/shortcut_manager.h
+    src/shortcut_key_edit.cpp
+    src/shortcut_key_edit.h
     src/main_window_audio.cpp
     src/main_window_playback.cpp
     resources/resources.qrc

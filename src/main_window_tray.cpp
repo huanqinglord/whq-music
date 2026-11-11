@@ -1,16 +1,19 @@
 #include "main_window.h"
+#include "desktop_lyrics_window.h"
 #include "player_widgets.h"
 #include "playback_controller.h"
 
 #include <QApplication>
 #include <QDebug>
 #include <QFileInfo>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
 #include <QMediaPlayer>
 #include <QMenu>
 #include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScopeGuard>
 #include <QSystemTrayIcon>
@@ -38,7 +41,8 @@ enum class TaskbarCommand : unsigned int
     Previous = 0x4001,
     PlayPause,
     Next,
-    PlayMode
+    PlayMode,
+    DesktopLyrics
 };
 }
 #endif
@@ -91,20 +95,34 @@ void MainWindow::updateTaskbarToolbar()
     const bool hasSongs = !m_playbackController->queue().isEmpty() || !m_songs.isEmpty();
     const bool controlsEnabled =
         isEnabled() && !m_exitRequested && !m_libraryImportInProgress && !m_fileEditInProgress;
-    const std::array<TaskbarCommand, 4> commands = {TaskbarCommand::Previous,
-                                                    TaskbarCommand::PlayPause, TaskbarCommand::Next,
-                                                    TaskbarCommand::PlayMode};
-    const std::array<QIcon, 4> icons = {
+    const bool lyricsVisible = m_desktopLyrics != nullptr && m_desktopLyrics->isVisible();
+    const int iconSize = qMax(16, GetSystemMetrics(SM_CXSMICON));
+    QPixmap lyricsPixmap(iconSize, iconSize);
+    lyricsPixmap.fill(Qt::transparent);
+    {
+        QPainter painter(&lyricsPixmap);
+        painter.setRenderHint(QPainter::TextAntialiasing);
+        QFont font = QApplication::font();
+        font.setPixelSize(iconSize - 2);
+        painter.setFont(font);
+        painter.setPen(QColor(QStringLiteral("#d9dbea")));
+        painter.drawText(lyricsPixmap.rect(), Qt::AlignCenter, QStringLiteral("桌"));
+    }
+    const std::array<TaskbarCommand, 5> commands = {
+        TaskbarCommand::Previous, TaskbarCommand::PlayPause, TaskbarCommand::Next,
+        TaskbarCommand::PlayMode, TaskbarCommand::DesktopLyrics};
+    const std::array<QIcon, 5> icons = {
         QIcon(QStringLiteral(":/icons/previous.svg")),
         QIcon(playing ? QStringLiteral(":/icons/pause.svg") : QStringLiteral(":/icons/play.svg")),
-        QIcon(QStringLiteral(":/icons/next.svg")), m_modeButton->icon()};
-    const std::array<QString, 4> tooltips = {
+        QIcon(QStringLiteral(":/icons/next.svg")), m_modeButton->icon(), QIcon(lyricsPixmap)};
+    const std::array<QString, 5> tooltips = {
         QStringLiteral("上一曲"), playing ? QStringLiteral("暂停") : QStringLiteral("播放"),
         QStringLiteral("下一曲"),
-        QStringLiteral("播放模式：%1（点击切换）").arg(m_modeButton->toolTip())};
-    const std::array<bool, 4> enabled = {hasSongs || hasSource, hasSongs || hasSource, hasSongs,
-                                         true};
-    std::array<THUMBBUTTON, 4> buttons{};
+        QStringLiteral("播放模式：%1（点击切换）").arg(m_modeButton->toolTip()),
+        lyricsVisible ? QStringLiteral("隐藏桌面歌词") : QStringLiteral("显示桌面歌词")};
+    const std::array<bool, 5> enabled = {
+        hasSongs || hasSource, hasSongs || hasSource, hasSongs, true, m_desktopLyrics != nullptr};
+    std::array<THUMBBUTTON, 5> buttons{};
     const auto releaseIcons = qScopeGuard([&buttons] {
         for (const THUMBBUTTON &button : buttons) {
             if (button.hIcon != nullptr) {
@@ -112,7 +130,6 @@ void MainWindow::updateTaskbarToolbar()
             }
         }
     });
-    const int iconSize = qMax(16, GetSystemMetrics(SM_CXSMICON));
     for (size_t index = 0; index < buttons.size(); ++index) {
         THUMBBUTTON &button = buttons[index];
         button.dwMask = THB_ICON | THB_TOOLTIP | THB_FLAGS;
@@ -242,7 +259,8 @@ bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr
         case TaskbarCommand::PlayPause:
         case TaskbarCommand::Next:
         case TaskbarCommand::PlayMode:
-            // 退出原生消息处理后再执行播放命令，避免 COM 回调中发生嵌套操作。
+        case TaskbarCommand::DesktopLyrics:
+            // 退出原生消息处理后再执行按钮命令，避免 COM 回调中发生嵌套操作。
             QTimer::singleShot(0, this, [this, command] {
                 if (!isEnabled() || m_exitRequested) {
                     return;
@@ -259,6 +277,9 @@ bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr
                     break;
                 case TaskbarCommand::PlayMode:
                     cyclePlayMode();
+                    break;
+                case TaskbarCommand::DesktopLyrics:
+                    toggleDesktopLyrics();
                     break;
                 }
             });
@@ -287,16 +308,20 @@ void MainWindow::initializeSystemTray()
         "QWidget#trayPlaybackPanel QPushButton:hover { background: #fffdf9; }"
         "QWidget#trayPlaybackPanel QPushButton:pressed { background: #eee5f5; }"
         "QWidget#trayPlaybackPanel QPushButton:disabled { color: #777777; }"
+        "QWidget#trayPlaybackPanel QPushButton#trayDesktopLyrics:checked { background: #e6dafa; }"
         "QWidget#trayPlaybackPanel QPushButton#trayPrimaryPlay { background: #e6dafa;"
         " border-radius: 22px; }"
         "QWidget#trayPlaybackPanel QPushButton#trayPrimaryPlay:hover { background: #f1e9ff; }"
         "QWidget#trayPlaybackPanel QPushButton#trayPrimaryPlay:pressed { background: #d9caef; }"
         "QWidget#trayPlaybackPanel QPushButton#trayPrimaryPlay:disabled { background: #eee8e2; }"
-        "QWidget#trayPlaybackPanel QPushButton#trayMode { background: transparent; border-radius: "
+        "QWidget#trayPlaybackPanel QPushButton#trayMode,"
+        "QWidget#trayPlaybackPanel QPushButton#trayDesktopLyrics { background: transparent; border-radius: "
         "8px; }"
-        "QWidget#trayPlaybackPanel QPushButton#trayMode:hover { background: rgba(90, 65, 110, 18); "
+        "QWidget#trayPlaybackPanel QPushButton#trayMode:hover,"
+        "QWidget#trayPlaybackPanel QPushButton#trayDesktopLyrics:hover { background: rgba(90, 65, 110, 18); "
         "}"
-        "QWidget#trayPlaybackPanel QPushButton#trayMode:pressed { background: rgba(90, 65, 110, "
+        "QWidget#trayPlaybackPanel QPushButton#trayMode:pressed,"
+        "QWidget#trayPlaybackPanel QPushButton#trayDesktopLyrics:pressed { background: rgba(90, 65, 110, "
         "28); }"
         "QWidget#trayPlaybackPanel QPushButton#trayExit { background: transparent; border-radius: "
         "6px;"
@@ -344,13 +369,23 @@ void MainWindow::initializeSystemTray()
     layout->addLayout(controls);
     layout->addSpacing(6);
 
+    auto *options = new QHBoxLayout;
+    options->setSpacing(4);
     m_trayModeButton = new QPushButton(panel);
     m_trayModeButton->setObjectName(QStringLiteral("trayMode"));
     m_trayModeButton->setCursor(Qt::PointingHandCursor);
-    m_trayModeButton->setFixedHeight(32);
+    m_trayModeButton->setFixedSize(100, 32);
     m_trayModeButton->setIconSize(QSize(20, 20));
     m_trayModeButton->setAutoDefault(false);
-    layout->addWidget(m_trayModeButton);
+    options->addWidget(m_trayModeButton);
+    m_trayDesktopLyricsButton = new QPushButton(QStringLiteral("桌"), panel);
+    m_trayDesktopLyricsButton->setObjectName(QStringLiteral("trayDesktopLyrics"));
+    m_trayDesktopLyricsButton->setFixedSize(32, 32);
+    m_trayDesktopLyricsButton->setCursor(Qt::PointingHandCursor);
+    m_trayDesktopLyricsButton->setAutoDefault(false);
+    m_trayDesktopLyricsButton->setCheckable(true);
+    options->addWidget(m_trayDesktopLyricsButton);
+    layout->addLayout(options);
     layout->addSpacing(14);
 
     auto *separator = new QWidget(panel);
@@ -385,6 +420,7 @@ void MainWindow::initializeSystemTray()
         playNext();
     });
     connect(m_trayModeButton, &QPushButton::clicked, this, &MainWindow::cyclePlayMode);
+    connect(m_trayDesktopLyricsButton, &QPushButton::clicked, this, &MainWindow::toggleDesktopLyrics);
     connect(menu, &QMenu::aboutToShow, this, &MainWindow::updateTrayPlayback);
     connect(exitButton, &QPushButton::clicked, this, [this, menu] {
         // 显式退出绕过关闭到托盘，随后由析构函数释放播放器及音效线程。
@@ -450,6 +486,12 @@ void MainWindow::updateTrayPlayback()
     m_trayPlayButton->setEnabled(controlsEnabled && (hasSongs || hasSource));
     m_trayNextButton->setEnabled(controlsEnabled && hasSongs);
     m_trayModeButton->setEnabled(controlsEnabled);
+    const bool lyricsVisible = m_desktopLyrics != nullptr && m_desktopLyrics->isVisible();
+    m_trayDesktopLyricsButton->setChecked(lyricsVisible);
+    m_trayDesktopLyricsButton->setToolTip(
+        lyricsVisible ? QStringLiteral("隐藏桌面歌词") : QStringLiteral("显示桌面歌词"));
+    m_trayDesktopLyricsButton->setAccessibleName(m_trayDesktopLyricsButton->toolTip());
+    m_trayDesktopLyricsButton->setEnabled(controlsEnabled && m_desktopLyrics != nullptr);
 }
 
 void MainWindow::restoreFromTray()

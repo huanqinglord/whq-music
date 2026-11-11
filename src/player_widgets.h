@@ -189,6 +189,8 @@ public:
 
     void setBackground(const QString &path);
 
+    QList<QColor> displayColors() const;
+
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
 
