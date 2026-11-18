@@ -40,6 +40,7 @@ public:
     void replaceAndPlay(const QList<Song> &songs);
     bool append(const Song &song, bool play);
     void playIndex(int index);
+    void restoreIndex(int index, qint64 position);
     void next(bool automatic = false);
     void previous();
     void toggle();
@@ -82,6 +83,7 @@ private:
     void resetAudioProgress(qint64 position);
     void invalidateAudioProgress();
     void loadCurrentSource();
+    void restorePlaybackWhenReady();
 
     AudioPlayer *m_player;
     QTimer *m_loadTimeout;
@@ -123,6 +125,8 @@ private:
     qint64 m_restorePosition = 0;
     QMediaPlayer::PlaybackState m_restoreState = QMediaPlayer::StoppedState;
     Mode m_mode = Mode::ListLoop;
+    bool m_restorePlaybackPending = false;
+    qint64 m_restorePlaybackPosition = 0;
 };
 
 #endif

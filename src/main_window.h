@@ -103,6 +103,8 @@ private:
     void synchronizePlaybackQueue();
     void restorePlaybackQueue();
     void savePlaybackQueue();
+    void savePlaybackProgress();
+    void restorePlaybackProgress();
     void rebuildPlaybackQueue();
     void updatePlayingIndicators();
     void refreshMusicLibrary(bool retryFailedScans = false);
@@ -239,6 +241,7 @@ private:
     QLineEdit *m_queueSearchEditor = nullptr;
     QTimer *m_searchTimer = nullptr;
     QTimer *m_volumeSaveTimer = nullptr;
+    QTimer *m_playbackProgressSaveTimer = nullptr;
     QTimer *m_lyricsScrollTimer = nullptr;
     bool m_lyricsViewDirty = true;
     QSlider *m_progress = nullptr;
@@ -267,6 +270,9 @@ private:
     bool m_libraryRefreshInProgress = false;
     bool m_queueDrawerOpen = false;
     bool m_playbackQueueRestored = false;
+    bool m_playbackProgressRestored = false;
+    qint64 m_savedPlaybackSongId = 0;
+    qint64 m_savedPlaybackPosition = -1;
     QString m_savedPlaybackQueue;
     bool m_showSimplifiedLyrics = true;
     AudioEffectProcessor::Preset m_audioEffectPreset = AudioEffectProcessor::Preset::Original;

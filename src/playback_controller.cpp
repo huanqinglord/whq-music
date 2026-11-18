@@ -64,6 +64,7 @@ PlaybackController::PlaybackController(AudioPlayer *player, QObject *parent)
                 }
                 restoreWhenReady();
                 recoverWhenReady();
+                restorePlaybackWhenReady();
                 if (m_attemptPending && !m_externalEdit &&
                     m_player->playbackState() == QMediaPlayer::PlayingState) {
                     acceptPlayingSong();
@@ -72,6 +73,7 @@ PlaybackController::PlaybackController(AudioPlayer *player, QObject *parent)
     connect(m_player, &AudioPlayer::seekableChanged, this, [this](bool) {
         restoreWhenReady();
         recoverWhenReady();
+        restorePlaybackWhenReady();
     });
     connect(m_player, &AudioPlayer::playbackStateChanged, this,
             [this](QMediaPlayer::PlaybackState state) {
@@ -101,6 +103,7 @@ PlaybackController::PlaybackController(AudioPlayer *player, QObject *parent)
             m_player->playbackState() == QMediaPlayer::PlayingState) {
             acceptPlayingSong();
         }
+        restorePlaybackWhenReady();
     });
     connect(m_player, &AudioPlayer::errorOccurred, this,
             [this](QMediaPlayer::Error error, const QString &description) {
@@ -306,6 +309,16 @@ void PlaybackController::playIndex(int index)
     }
 }
 
+void PlaybackController::restoreIndex(int index, qint64 position)
+{
+    if (index < 0 || index >= m_queue.size()) {
+        return;
+    }
+    m_restorePlaybackPending = true;
+    m_restorePlaybackPosition = qMax<qint64>(0, position);
+    beginAttempts({m_queue.at(index).id});
+}
+
 void PlaybackController::beginAttempts(const QList<qint64> &ids, int historyTarget)
 {
     resetRecovery();
@@ -358,9 +371,24 @@ void PlaybackController::tryNext()
         m_loadTimeout->start();
         loadCurrentSource();
         m_player->play();
+        restorePlaybackWhenReady();
         return;
     }
     failPlayback(QStringLiteral("播放目标已不在当前列表中，请重新选择歌曲。"));
+}
+
+void PlaybackController::restorePlaybackWhenReady()
+{
+    if (!m_restorePlaybackPending || m_player->source().isEmpty() ||
+        !m_player->isSeekable() ||
+        (m_player->mediaStatus() != QMediaPlayer::LoadedMedia &&
+         m_player->mediaStatus() != QMediaPlayer::BufferedMedia)) {
+        return;
+    }
+    m_restorePlaybackPending = false;
+    const qint64 position = qBound<qint64>(0, m_restorePlaybackPosition, m_player->duration());
+    m_player->setPosition(position);
+    resetAudioProgress(position);
 }
 
 bool PlaybackController::skipMissingSong()

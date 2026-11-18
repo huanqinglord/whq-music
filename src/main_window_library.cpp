@@ -252,6 +252,62 @@ void MainWindow::restorePlaybackQueue()
     m_savedPlaybackQueue = saved;
     m_playbackController->restoreQueue(songs);
     m_playbackQueueRestored = true;
+    restorePlaybackProgress();
+}
+
+void MainWindow::restorePlaybackProgress()
+{
+    if (m_playbackProgressRestored) {
+        return;
+    }
+    m_playbackProgressRestored = true;
+    const qint64 songId = setting(QStringLiteral("playbackSongId")).toLongLong();
+    const qint64 position = qMax<qint64>(0, setting(QStringLiteral("playbackPosition")).toLongLong());
+    if (songId <= 0) {
+        return;
+    }
+    int index = -1;
+    for (int row = 0; row < m_playbackController->queue().size(); ++row) {
+        if (m_playbackController->queue().at(row).id == songId) {
+            index = row;
+            break;
+        }
+    }
+    if (index < 0) {
+        for (const Song &song : std::as_const(m_librarySongs)) {
+            if (song.id == songId) {
+                m_playbackController->append(song, false);
+                index = m_playbackController->queue().size() - 1;
+                break;
+            }
+        }
+    }
+    if (index >= 0) {
+        m_playbackController->restoreIndex(index, position);
+    }
+}
+
+void MainWindow::savePlaybackProgress()
+{
+    if (m_playbackController == nullptr || m_player == nullptr ||
+        m_playbackController->currentId() <= 0 || m_player->source().isEmpty()) {
+        return;
+    }
+    const qint64 songId = m_playbackController->currentId();
+    const qint64 position = qMax<qint64>(0, m_player->position());
+    if (songId == m_savedPlaybackSongId && position == m_savedPlaybackPosition) {
+        return;
+    }
+    QString error;
+    if (m_repository->saveSettings(
+            {{QStringLiteral("playbackSongId"), QString::number(songId)},
+             {QStringLiteral("playbackPosition"), QString::number(position)}},
+            error)) {
+        m_savedPlaybackSongId = songId;
+        m_savedPlaybackPosition = position;
+    } else if (!error.isEmpty()) {
+        qWarning() << "Failed to save playback progress" << error;
+    }
 }
 
 void MainWindow::savePlaybackQueue()

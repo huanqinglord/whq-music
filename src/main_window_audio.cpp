@@ -23,6 +23,11 @@ void MainWindow::initializePlayback()
     m_metadataScanner = new MetadataScanner(this);
     connect(m_playbackController, &PlaybackController::songStarted, this,
             &MainWindow::showPlayingSong);
+    m_playbackProgressSaveTimer = new QTimer(this);
+    m_playbackProgressSaveTimer->setInterval(5000);
+    connect(m_playbackProgressSaveTimer, &QTimer::timeout, this,
+            &MainWindow::savePlaybackProgress);
+    m_playbackProgressSaveTimer->start();
     connect(m_playbackController, &PlaybackController::cleared, this,
             &MainWindow::clearPlayingSong);
     connect(m_playbackController, &PlaybackController::outputResetRequested, this, [this] {
@@ -171,6 +176,7 @@ void MainWindow::initializePlayback()
                     m_audioEffectProcessor->setPaused(false);
                 } else if (state == QMediaPlayer::PausedState) {
                     m_audioEffectProcessor->setPaused(true);
+                    savePlaybackProgress();
                 }
                 // Decoder EOF can precede the last audible samples. The
                 // controller keeps that output alive until the sink drains.

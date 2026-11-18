@@ -106,6 +106,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
 MainWindow::~MainWindow()
 {
+    savePlaybackProgress();
     if (m_desktopLyricsTimer != nullptr) {
         m_desktopLyricsTimer->stop();
     }
