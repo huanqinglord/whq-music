@@ -4,6 +4,7 @@
 
 #include <QAbstractItemView>
 #include <QAudioOutput>
+#include <QCheckBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -59,9 +60,11 @@ QWidget *MainWindow::createLibraryPage()
     m_songModel = new SongTableModel(m_songs, m_fileSizeCache, m_songsTable);
     m_songsTable->setModel(m_songModel);
     m_songsTable->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_songsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_songsTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    m_songsTable->setColumnWidth(0, 36);
     m_songsTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    m_songsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    m_songsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    m_songsTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_songsTable->horizontalHeader()->setResizeContentsPrecision(0);
     m_songsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_songsTable->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -100,6 +103,29 @@ QWidget *MainWindow::createLibraryPage()
     songsHeaderLayout->addStretch();
     songsHeaderLayout->addWidget(m_searchEditor);
     songsLayout->addWidget(songsHeader);
+    auto *selectionBar = new QWidget(this);
+    selectionBar->setObjectName(QStringLiteral("songSelectionBar"));
+    selectionBar->setFixedHeight(34);
+    auto *selectionLayout = new QHBoxLayout(selectionBar);
+    selectionLayout->setContentsMargins(4, 0, 4, 0);
+    selectionLayout->setSpacing(6);
+    m_selectAllSongsCheckBox = new QCheckBox(QStringLiteral("全选"), selectionBar);
+    m_selectAllSongsCheckBox->setTristate(true);
+    m_selectedSongsLabel = new QLabel(QStringLiteral("已选择 0 首"), selectionBar);
+    selectionLayout->addWidget(m_selectAllSongsCheckBox);
+    selectionLayout->addWidget(m_selectedSongsLabel);
+    m_selectedSongsLabel->setVisible(false);
+    selectionLayout->addStretch();
+    m_addSelectedSongsButton = new QPushButton(QStringLiteral("加入播放列表"), selectionBar);
+    m_addSelectedToGroupButton = new QPushButton(QStringLiteral("添加到分组"), selectionBar);
+    m_deleteSelectedSongsButton = new QPushButton(QStringLiteral("从当前分组移除"), selectionBar);
+    selectionLayout->addWidget(m_addSelectedSongsButton);
+    selectionLayout->addWidget(m_addSelectedToGroupButton);
+    selectionLayout->addWidget(m_deleteSelectedSongsButton);
+    m_addSelectedSongsButton->setVisible(false);
+    m_addSelectedToGroupButton->setVisible(false);
+    m_deleteSelectedSongsButton->setVisible(false);
+    songsLayout->addWidget(selectionBar);
     songsLayout->addWidget(m_songsTable);
     auto *songsPanel = new QWidget(this);
     songsPanel->setObjectName(QStringLiteral("panel"));
@@ -210,6 +236,18 @@ void MainWindow::connectLibraryControls()
     connect(m_refreshLibraryButton, &QPushButton::clicked, this, [this] {
         refreshMusicLibrary(true);
     });
+    connect(m_selectAllSongsCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        m_songModel->setAllSongsChecked(checked);
+        updateSongSelectionToolbar();
+    });
+    connect(m_songModel, &QAbstractItemModel::dataChanged, this,
+            [this] { updateSongSelectionToolbar(); });
+    connect(m_addSelectedSongsButton, &QPushButton::clicked, this,
+            &MainWindow::addSelectedSongsToPlaybackQueue);
+    connect(m_addSelectedToGroupButton, &QPushButton::clicked, this,
+            &MainWindow::addSelectedSongsToGroup);
+    connect(m_deleteSelectedSongsButton, &QPushButton::clicked, this,
+            &MainWindow::removeSelectedSongsFromCurrentGroup);
     m_searchTimer = new QTimer(this);
     m_searchTimer->setSingleShot(true);
     m_searchTimer->setInterval(200);
@@ -232,6 +270,7 @@ void MainWindow::connectLibraryControls()
             }
             return;
         }
+        m_songModel->clearCheckedSongs();
         m_activeGroupId = item->data(Qt::UserRole).toLongLong();
         loadSongs(false);
     });

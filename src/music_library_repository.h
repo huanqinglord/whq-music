@@ -20,7 +20,13 @@ public:
     bool saveGroup(const QString &name, qint64 groupId, QString &error);
     bool deleteGroup(qint64 groupId, QString &error);
     bool deleteSong(qint64 songId, QString &error);
+    bool deleteSongs(const QList<qint64> &songIds, QString &error);
+    bool removeSongFromGroup(qint64 songId, qint64 groupId, QString &error);
+    bool removeSongFromAllGroups(qint64 songId, QString &error);
+    bool removeSongsFromGroup(const QList<qint64> &songIds, qint64 groupId, QString &error);
     bool assignGroups(qint64 songId, const QList<qint64> &groups, QString &error);
+    bool addSongsToGroups(const QList<qint64> &songIds, const QList<qint64> &groups,
+                          QString &error);
     bool saveArtist(qint64 songId, const QString &artist, bool onlyEmpty, QString &error);
     bool saveArtistScan(qint64 songId, const QString &artist, ArtistScanState state,
                         QString &error);

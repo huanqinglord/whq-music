@@ -18,6 +18,7 @@
 #include <QToolTip>
 #include <QUrl>
 #include <QVariant>
+#include <QStyleOptionViewItem>
 
 #include <utility>
 
@@ -36,23 +37,26 @@ int SongTableModel::rowCount(const QModelIndex &parent) const
 
 int SongTableModel::columnCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : 3;
+    return parent.isValid() ? 0 : 4;
 }
 
 QVariant SongTableModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() < 0 || index.row() >= m_songs.size() ||
-        index.column() < 0 || index.column() >= 3) {
+        index.column() < 0 || index.column() >= 4) {
         return {};
     }
     const Song &song = m_songs.at(index.row());
     if (role == Qt::UserRole) {
         return song.id;
     }
+    if (role == Qt::CheckStateRole && index.column() == 0) {
+        return m_checkedSongIds.contains(song.id) ? Qt::Checked : Qt::Unchecked;
+    }
     if (role == Qt::TextAlignmentRole) {
         return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
     }
-    if (role == Qt::ToolTipRole && index.column() == 0) {
+    if (role == Qt::ToolTipRole && index.column() == 1) {
         return song.title;
     }
     if (role != Qt::DisplayRole) {
@@ -60,10 +64,12 @@ QVariant SongTableModel::data(const QModelIndex &index, int role) const
     }
     switch (index.column()) {
     case 0:
-        return song.title;
+        return {};
     case 1:
+        return song.title;
+    case 2:
         return song.artist.isEmpty() ? QStringLiteral("未知歌手") : song.artist;
-    case 2: {
+    case 3: {
         const qint64 bytes = m_fileSizes.value(normalizedPath(song.path), -1);
         return bytes < 0 ? QStringLiteral("--")
                          : QString::number(bytes / (1024.0 * 1024.0), 'f', 2) +
@@ -79,22 +85,109 @@ QVariant SongTableModel::headerData(int section, Qt::Orientation orientation, in
     if (orientation != Qt::Horizontal || role != Qt::DisplayRole) {
         return QAbstractTableModel::headerData(section, orientation, role);
     }
-    static const QStringList labels = {QStringLiteral("歌曲"), QStringLiteral("歌手"),
+    static const QStringList labels = {QString(), QStringLiteral("歌曲"), QStringLiteral("歌手"),
                                        QStringLiteral("文件大小")};
     return section >= 0 && section < labels.size() ? QVariant(labels.at(section)) : QVariant();
+}
+
+Qt::ItemFlags SongTableModel::flags(const QModelIndex &index) const
+{
+    Qt::ItemFlags itemFlags = QAbstractTableModel::flags(index);
+    if (index.isValid() && index.column() == 0) {
+        itemFlags |= Qt::ItemIsUserCheckable;
+    }
+    return itemFlags;
+}
+
+bool SongTableModel::setData(const QModelIndex &index, const QVariant &value, int role)
+{
+    if (!index.isValid() || index.column() != 0 || role != Qt::CheckStateRole) {
+        return QAbstractTableModel::setData(index, value, role);
+    }
+    const qint64 songId = m_songs.at(index.row()).id;
+    if (value.toInt() == Qt::Checked) {
+        m_checkedSongIds.insert(songId);
+    } else {
+        m_checkedSongIds.remove(songId);
+    }
+    emit dataChanged(index, index, {Qt::CheckStateRole});
+    return true;
 }
 
 void SongTableModel::setSongs(QList<Song> songs)
 {
     beginResetModel();
     m_songs = std::move(songs);
+    QSet<qint64> availableIds;
+    for (const Song &song : std::as_const(m_songs)) {
+        availableIds.insert(song.id);
+    }
+    m_checkedSongIds.intersect(availableIds);
     endResetModel();
+}
+
+QSet<qint64> SongTableModel::checkedSongIds() const
+{
+    return m_checkedSongIds;
+}
+
+void SongTableModel::clearCheckedSongs()
+{
+    if (m_checkedSongIds.isEmpty()) {
+        return;
+    }
+    m_checkedSongIds.clear();
+    if (rowCount() > 0) {
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {Qt::CheckStateRole});
+    }
+}
+
+void SongTableModel::setAllSongsChecked(bool checked)
+{
+    if (checked) {
+        for (const Song &song : std::as_const(m_songs)) {
+            m_checkedSongIds.insert(song.id);
+        }
+    } else {
+        m_checkedSongIds.clear();
+    }
+    if (rowCount() > 0) {
+        emit dataChanged(index(0, 0), index(rowCount() - 1, 0), {Qt::CheckStateRole});
+    }
+}
+
+GroupCheckListWidget::GroupCheckListWidget(QWidget *parent) : QListWidget(parent)
+{
+}
+
+void GroupCheckListWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        const QPoint position = event->position().toPoint();
+        const QModelIndex index = indexAt(position);
+        if (index.isValid()) {
+            QStyleOptionViewItem option;
+            option.initFrom(this);
+            option.rect = visualRect(index);
+            option.state = QStyle::State_Active;
+            const QRect indicator = style()->subElementRect(
+                QStyle::SE_ItemViewItemCheckIndicator, &option, this);
+            if (!indicator.contains(position)) {
+                QListWidgetItem *item = itemFromIndex(index);
+                item->setCheckState(item->checkState() == Qt::Checked ? Qt::Unchecked
+                                                                        : Qt::Checked);
+                event->accept();
+                return;
+            }
+        }
+    }
+    QListWidget::mouseReleaseEvent(event);
 }
 
 void SongTableModel::refreshFileSizes()
 {
     if (!m_songs.isEmpty()) {
-        emit dataChanged(index(0, 2), index(rowCount() - 1, 2), {Qt::DisplayRole});
+        emit dataChanged(index(0, 3), index(rowCount() - 1, 3), {Qt::DisplayRole});
     }
 }
 
@@ -217,9 +310,9 @@ void SongTableItemDelegate::paint(QPainter *painter, const QStyleOptionViewItem 
     rowOption.state &= ~QStyle::State_HasFocus;
     const auto *table = qobject_cast<QTableView *>(parent());
     const bool currentSong =
-        table != nullptr && index.column() == 0 && index.data(Qt::UserRole).toLongLong() > 0 &&
+        table != nullptr && index.column() == 1 && index.data(Qt::UserRole).toLongLong() > 0 &&
         index.data(Qt::UserRole).toLongLong() == table->property("playingSongId").toLongLong();
-    if (index.column() == 0) {
+    if (index.column() == 1) {
         rowOption.rect.adjust(20, 0, 0, 0);
     }
     QStyledItemDelegate::paint(painter, rowOption, index);

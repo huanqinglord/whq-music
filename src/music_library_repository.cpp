@@ -186,6 +186,69 @@ bool MusicLibraryRepository::deleteSong(qint64 songId, QString &error)
         error);
 }
 
+bool MusicLibraryRepository::deleteSongs(const QList<qint64> &songIds, QString &error)
+{
+    return transaction(
+        [this, songIds] {
+            QSqlQuery query(m_database);
+            query.prepare(QStringLiteral("DELETE FROM songs WHERE id=?"));
+            for (qint64 songId : songIds) {
+                query.bindValue(0, songId);
+                if (!query.exec()) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        error);
+}
+
+bool MusicLibraryRepository::removeSongFromGroup(qint64 songId, qint64 groupId, QString &error)
+{
+    return transaction(
+        [this, songId, groupId] {
+            QSqlQuery query(m_database);
+            query.prepare(QStringLiteral(
+                "DELETE FROM song_groups WHERE song_id=? AND group_id=?"));
+            query.addBindValue(songId);
+            query.addBindValue(groupId);
+            return query.exec();
+        },
+        error);
+}
+
+bool MusicLibraryRepository::removeSongFromAllGroups(qint64 songId, QString &error)
+{
+    return transaction(
+        [this, songId] {
+            QSqlQuery query(m_database);
+            query.prepare(QStringLiteral("DELETE FROM song_groups WHERE song_id=?"));
+            query.addBindValue(songId);
+            return query.exec();
+        },
+        error);
+}
+
+bool MusicLibraryRepository::removeSongsFromGroup(const QList<qint64> &songIds, qint64 groupId,
+                                                  QString &error)
+{
+    return transaction(
+        [this, songIds, groupId] {
+            QSqlQuery query(m_database);
+            query.prepare(QStringLiteral(
+                "DELETE FROM song_groups WHERE song_id=? AND group_id=?"));
+            for (qint64 songId : songIds) {
+                query.bindValue(0, songId);
+                query.bindValue(1, groupId);
+                if (!query.exec()) {
+                    return false;
+                }
+            }
+            return true;
+        },
+        error);
+}
+
 bool MusicLibraryRepository::assignGroups(qint64 songId, const QList<qint64> &groups,
                                           QString &error)
 {
@@ -210,6 +273,28 @@ bool MusicLibraryRepository::assignGroups(qint64 songId, const QList<qint64> &gr
                 query.addBindValue(groupId);
                 if (!query.exec()) {
                     return false;
+                }
+            }
+            return true;
+        },
+        error);
+}
+
+bool MusicLibraryRepository::addSongsToGroups(const QList<qint64> &songIds,
+                                              const QList<qint64> &groups, QString &error)
+{
+    return transaction(
+        [this, songIds, groups] {
+            QSqlQuery query(m_database);
+            for (qint64 songId : songIds) {
+                for (qint64 groupId : groups) {
+                    query.prepare(QStringLiteral(
+                        "INSERT OR IGNORE INTO song_groups(song_id,group_id) VALUES(?,?)"));
+                    query.addBindValue(songId);
+                    query.addBindValue(groupId);
+                    if (!query.exec()) {
+                        return false;
+                    }
                 }
             }
             return true;

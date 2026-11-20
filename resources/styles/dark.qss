@@ -77,6 +77,34 @@ QWidget {
     background-color: transparent;
 }
 
+#songSelectionBar {
+    background-color: transparent;
+}
+
+#songSelectionBar QPushButton {
+    min-height: 26px;
+    padding: 0 12px;
+    color: #cfd3e2;
+    background-color: rgba(255, 255, 255, 12);
+    border: 1px solid rgba(255, 255, 255, 26);
+    border-radius: 6px;
+}
+
+#songSelectionBar QPushButton:hover {
+    color: #ffffff;
+    background-color: rgba(118, 103, 245, 125);
+    border-color: rgba(167, 157, 255, 170);
+}
+
+#songSelectionBar QLabel,
+#songSelectionBar QCheckBox {
+    color: #b8bdd0;
+}
+
+#songSelectionBar QCheckBox {
+    spacing: 6px;
+}
+
 #songsHintButton,
 #refreshLibraryButton {
     min-width: 28px;

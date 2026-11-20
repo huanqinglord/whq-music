@@ -20,6 +20,9 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
     void showEvent(QShowEvent *event) override;
+#ifdef Q_OS_WIN
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
+#endif
 
 private:
     QPointer<QWidget> m_backgroundSurface;

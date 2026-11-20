@@ -17,6 +17,7 @@
 #include <memory>
 
 class QCloseEvent;
+class QCheckBox;
 class QFontComboBox;
 class QLabel;
 class QLineEdit;
@@ -118,6 +119,10 @@ private:
     void addGroupItem(qint64 groupId, const QString &name);
     void showGroupMenu(qint64 groupId, const QString &name, QWidget *anchor);
     void showSongMenu(const QPoint &position);
+    void updateSongSelectionToolbar();
+    void addSelectedSongsToPlaybackQueue();
+    void addSelectedSongsToGroup();
+    void removeSelectedSongsFromCurrentGroup();
     void showQueueMenu(const QPoint &position);
     void editSongMetadata(qint64 songId);
     void showMetadataEditor(const AudioMetadataSnapshot &snapshot);
@@ -190,6 +195,7 @@ private:
     QPushButton *m_trayModeButton = nullptr;
     QPushButton *m_trayDesktopLyricsButton = nullptr;
     bool m_exitRequested = false;
+    bool m_closingDialogsToTray = false;
 #ifdef Q_OS_WIN
     ITaskbarList3 *m_taskbar = nullptr;
     unsigned int m_taskbarCreatedMessage = 0;
@@ -223,6 +229,11 @@ private:
     QPushButton *m_playButton = nullptr;
     QPushButton *m_modeButton = nullptr;
     QPushButton *m_refreshLibraryButton = nullptr;
+    QCheckBox *m_selectAllSongsCheckBox = nullptr;
+    QLabel *m_selectedSongsLabel = nullptr;
+    QPushButton *m_addSelectedSongsButton = nullptr;
+    QPushButton *m_addSelectedToGroupButton = nullptr;
+    QPushButton *m_deleteSelectedSongsButton = nullptr;
     QPushButton *m_lyricsScriptButton = nullptr;
     QPushButton *m_desktopLyricsButton = nullptr;
     QPushButton *m_audioEffectButton = nullptr;

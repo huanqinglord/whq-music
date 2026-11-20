@@ -10,6 +10,7 @@
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDialog>
 #include <QEasingCurve>
 #include <QEvent>
 #include <QFileDialog>
@@ -293,6 +294,23 @@ void MainWindow::updateMaximizeButton()
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    if (event->type() == QEvent::Close && !m_exitRequested && !m_closingDialogsToTray) {
+        auto *dialog = qobject_cast<QDialog *>(watched);
+        if (dialog != nullptr && dialog->parentWidget() == this && dialog->isVisible() &&
+            dialog->windowType() == Qt::Tool) {
+            m_closingDialogsToTray = true;
+            const QList<QDialog *> dialogs = findChildren<QDialog *>();
+            for (QDialog *candidate : dialogs) {
+                if (candidate != nullptr && candidate->isVisible()) {
+                    candidate->reject();
+                }
+            }
+            m_closingDialogsToTray = false;
+            hide();
+            event->accept();
+            return true;
+        }
+    }
     if (m_lyricsScrollTimer != nullptr &&
         (watched == this || watched == m_lyrics || watched == m_lyrics->viewport())) {
         if (event->type() == QEvent::Hide) {
@@ -331,6 +349,14 @@ void MainWindow::closeEvent(QCloseEvent *event)
         event->accept();
         return;
     }
+    m_closingDialogsToTray = true;
+    const QList<QDialog *> dialogs = findChildren<QDialog *>();
+    for (QDialog *dialog : dialogs) {
+        if (dialog != nullptr && dialog->isVisible()) {
+            dialog->reject();
+        }
+    }
+    m_closingDialogsToTray = false;
     event->ignore();
     if (m_trayIcon != nullptr && QSystemTrayIcon::isSystemTrayAvailable()) {
         m_trayIcon->show();

@@ -15,6 +15,7 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPushButton>
+#include <QSet>
 #include <QSlider>
 #include <QStyledItemDelegate>
 #include <QTableView>
@@ -89,6 +90,11 @@ public:
 
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
+    Qt::ItemFlags flags(const QModelIndex &index) const override;
+
+    bool setData(const QModelIndex &index, const QVariant &value,
+                 int role = Qt::EditRole) override;
+
     QVariant headerData(int section, Qt::Orientation orientation,
                         int role = Qt::DisplayRole) const override;
 
@@ -98,10 +104,24 @@ public:
 
     void refreshArtist(int row);
 
+    QSet<qint64> checkedSongIds() const;
+    void clearCheckedSongs();
+    void setAllSongsChecked(bool checked);
+
 private:
     // MainWindow owns these collections; the model exposes them without per-cell objects.
     QList<Song> &m_songs;
     const QHash<QString, qint64> &m_fileSizes;
+    QSet<qint64> m_checkedSongIds;
+};
+
+class GroupCheckListWidget final : public QListWidget
+{
+public:
+    explicit GroupCheckListWidget(QWidget *parent = nullptr);
+
+protected:
+    void mouseReleaseEvent(QMouseEvent *event) override;
 };
 
 class SongTableView final : public QTableView

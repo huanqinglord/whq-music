@@ -70,10 +70,6 @@ protected:
                          const QModelIndex &index) const override
     {
         QStyledItemDelegate::initStyleOption(option, index);
-        // 编辑框覆盖单元格时只绘制背景，避免两层文字叠加。
-        if (option->state.testFlag(QStyle::State_Editing)) {
-            option->text.clear();
-        }
     }
 };
 

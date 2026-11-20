@@ -15,6 +15,10 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 AppDialog::AppDialog(const QString &title, QWidget *backgroundSurface,
                      const QPixmap &backdrop, QWidget *parent)
     : QDialog(parent)
@@ -24,6 +28,7 @@ AppDialog::AppDialog(const QString &title, QWidget *backgroundSurface,
     setProperty("appDialog", true);
     setWindowTitle(title);
     setWindowFlag(Qt::FramelessWindowHint);
+    setWindowFlag(Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
     setSizeGripEnabled(true);
 
@@ -144,3 +149,26 @@ void AppDialog::showEvent(QShowEvent *event)
     }
     move(position);
 }
+
+#ifdef Q_OS_WIN
+bool AppDialog::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    if (eventType == "windows_generic_MSG" && message != nullptr) {
+        const auto *nativeMessage = static_cast<MSG *>(message);
+        if (nativeMessage->message == WM_CLOSE && parentWidget() != nullptr) {
+            const QList<QDialog *> dialogs = parentWidget()->findChildren<QDialog *>();
+            for (QDialog *dialog : dialogs) {
+                if (dialog != nullptr && dialog->isVisible()) {
+                    dialog->reject();
+                }
+            }
+            parentWidget()->close();
+            if (result != nullptr) {
+                *result = 0;
+            }
+            return true;
+        }
+    }
+    return QDialog::nativeEvent(eventType, message, result);
+}
+#endif

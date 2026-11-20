@@ -6,6 +6,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFileInfo>
@@ -20,6 +21,7 @@
 #include <QSet>
 #include <QTableWidget>
 #include <QTimer>
+#include <QToolTip>
 #include <QVBoxLayout>
 #include <QVariant>
 
@@ -237,7 +239,7 @@ void MainWindow::showSongMenu(const QPoint &position)
             QMessageBox::warning(this, QStringLiteral("读取失败"), error);
             return;
         }
-        auto *groupList = new QListWidget(&dialog);
+        auto *groupList = new GroupCheckListWidget(&dialog);
         groupList->setObjectName(QStringLiteral("groupMembershipList"));
         for (const MusicGroup &group : groups) {
             auto *item = new QListWidgetItem(group.name, groupList);
@@ -307,17 +309,163 @@ void MainWindow::showSongMenu(const QPoint &position)
         }
         loadSongs(false);
     });
-    menu.addAction(QStringLiteral("从音乐库删除"), this, [this, songId] {
-        QString error;
-        if (!m_repository->deleteSong(songId, error)) {
-            QMessageBox::warning(this, QStringLiteral("删除失败"), error);
-            return;
-        }
-        loadSongs();
-    });
+    const bool inAllMusic = currentGroupId() <= 0;
+    QAction *removeFromCurrentGroup = menu.addAction(
+        inAllMusic ? QStringLiteral("\u4ece\u5176\u4ed6\u5206\u7ec4\u79fb\u9664") : QStringLiteral("\u4ece\u5f53\u524d\u5206\u7ec4\u79fb\u9664"), this,
+        [this, songId] {
+            const qint64 groupId = currentGroupId();
+            QString error;
+            const bool removed = groupId > 0
+                                     ? m_repository->removeSongFromGroup(songId, groupId, error)
+                                     : m_repository->removeSongFromAllGroups(songId, error);
+            if (!removed) {
+                QMessageBox::warning(this, QStringLiteral("\u79fb\u9664\u5931\u8d25"), error);
+                return;
+            }
+            loadSongs(false);
+        });
+    if (!inAllMusic) {
+        menu.addAction(QStringLiteral("\u4ece\u6240\u6709\u5206\u7ec4\u79fb\u9664"), this, [this, songId] {
+            QString error;
+            if (!m_repository->removeSongFromAllGroups(songId, error)) {
+                QMessageBox::warning(this, QStringLiteral("\u79fb\u9664\u5931\u8d25"), error);
+                return;
+            }
+            loadSongs(false);
+        });
+    }
     if (menu.exec(m_songsTable->viewport()->mapToGlobal(position)) == lyricsAction) {
         requestLyricsDownload(audioPath);
     }
+}
+
+void MainWindow::updateSongSelectionToolbar()
+{
+    const int selectedCount = m_songModel->checkedSongIds().size();
+    m_selectedSongsLabel->setText(QStringLiteral("已选择 %1 首").arg(selectedCount));
+    const bool hasSelection = selectedCount > 0;
+    m_selectedSongsLabel->setVisible(hasSelection);
+    m_addSelectedSongsButton->setEnabled(hasSelection);
+    m_addSelectedToGroupButton->setEnabled(hasSelection);
+    m_deleteSelectedSongsButton->setEnabled(hasSelection);
+    m_deleteSelectedSongsButton->setText(
+        currentGroupId() > 0 ? QStringLiteral("\u4ece\u5f53\u524d\u5206\u7ec4\u79fb\u9664")
+                             : QStringLiteral("\u4ece\u5176\u4ed6\u5206\u7ec4\u79fb\u9664"));
+    m_addSelectedSongsButton->setVisible(hasSelection);
+    m_addSelectedToGroupButton->setVisible(hasSelection);
+    m_deleteSelectedSongsButton->setVisible(hasSelection);
+    const bool allSelected = !m_songs.isEmpty() && selectedCount == m_songs.size();
+    const QSignalBlocker blocker(m_selectAllSongsCheckBox);
+    m_selectAllSongsCheckBox->setCheckState(
+        allSelected ? Qt::Checked : (hasSelection ? Qt::PartiallyChecked : Qt::Unchecked));
+}
+
+void MainWindow::addSelectedSongsToPlaybackQueue()
+{
+    const QSet<qint64> selectedIds = m_songModel->checkedSongIds();
+    int addedCount = 0;
+    for (const Song &song : std::as_const(m_songs)) {
+        if (selectedIds.contains(song.id) && m_playbackController->append(song, false)) {
+            ++addedCount;
+        }
+    }
+    updateTaskbarToolbar();
+    QToolTip::showText(QCursor::pos(), QStringLiteral("已加入 %1 首歌曲").arg(addedCount),
+                       m_songsTable);
+}
+
+void MainWindow::addSelectedSongsToGroup()
+{
+    QList<MusicGroup> groups;
+    QString error;
+    if (!m_repository->loadGroups(groups, error)) {
+        QMessageBox::warning(this, QStringLiteral("读取失败"), error);
+        return;
+    }
+    if (groups.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("暂无分组"),
+                                 QStringLiteral("请先创建分组。"));
+        return;
+    }
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("添加到分组"));
+    dialog.resize(360, 420);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(QStringLiteral("为已选择的歌曲添加分组"), &dialog));
+    auto *list = new GroupCheckListWidget(&dialog);
+    for (const MusicGroup &group : groups) {
+        auto *item = new QListWidgetItem(group.name, list);
+        item->setData(Qt::UserRole, group.id);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Unchecked);
+    }
+    layout->addWidget(list, 1);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("添加"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    QList<qint64> selectedGroups;
+    for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->checkState() == Qt::Checked) {
+            selectedGroups.append(list->item(row)->data(Qt::UserRole).toLongLong());
+        }
+    }
+    if (selectedGroups.isEmpty()) {
+        return;
+    }
+    if (!m_repository->addSongsToGroups(m_songModel->checkedSongIds().values(), selectedGroups,
+                                        error)) {
+        QMessageBox::warning(this, QStringLiteral("保存失败"), error);
+        return;
+    }
+    loadSongs(false);
+}
+
+void MainWindow::removeSelectedSongsFromCurrentGroup()
+{
+    const QList<qint64> songIds = m_songModel->checkedSongIds().values();
+    const qint64 groupId = currentGroupId();
+    if (songIds.isEmpty()) {
+        return;
+    }
+    const bool inAllMusic = groupId <= 0;
+    const QString actionText = inAllMusic ? QStringLiteral("\u4ece\u5176\u4ed6\u5206\u7ec4\u79fb\u9664")
+                                          : QStringLiteral("\u4ece\u5f53\u524d\u5206\u7ec4\u79fb\u9664");
+    QMessageBox confirmation(this);
+    confirmation.setIcon(QMessageBox::Question);
+    confirmation.setWindowTitle(QStringLiteral("\u786e\u8ba4\u79fb\u9664"));
+    confirmation.setText(QStringLiteral("\u786e\u5b9a%1 %2 \u9996\u6b4c\u66f2\u5417\uff1f")
+                             .arg(actionText)
+                             .arg(songIds.size()));
+    auto *confirmButton =
+        confirmation.addButton(QStringLiteral("\u786e\u8ba4"), QMessageBox::AcceptRole);
+    confirmation.addButton(QStringLiteral("\u53d6\u6d88"), QMessageBox::RejectRole);
+    confirmation.exec();
+    if (confirmation.clickedButton() != confirmButton) {
+        return;
+    }
+    QString error;
+    bool removed = true;
+    if (inAllMusic) {
+        for (qint64 songId : songIds) {
+            if (!m_repository->removeSongFromAllGroups(songId, error)) {
+                removed = false;
+                break;
+            }
+        }
+    } else {
+        removed = m_repository->removeSongsFromGroup(songIds, groupId, error);
+    }
+    if (!removed) {
+        QMessageBox::warning(this, QStringLiteral("\u79fb\u9664\u5931\u8d25"), error);
+        return;
+    }
+    loadSongs(false);
 }
 
 void MainWindow::showQueueMenu(const QPoint &position)

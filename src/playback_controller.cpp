@@ -369,8 +369,11 @@ void PlaybackController::tryNext()
         m_changingSource = false;
         emit songStarted(song);
         m_loadTimeout->start();
+        const bool restoringPlayback = m_restorePlaybackPending;
         loadCurrentSource();
-        m_player->play();
+        if (!restoringPlayback) {
+            m_player->play();
+        }
         restorePlaybackWhenReady();
         return;
     }
@@ -386,9 +389,13 @@ void PlaybackController::restorePlaybackWhenReady()
         return;
     }
     m_restorePlaybackPending = false;
+    m_loadTimeout->stop();
+    m_userPaused = true;
     const qint64 position = qBound<qint64>(0, m_restorePlaybackPosition, m_player->duration());
     m_player->setPosition(position);
     resetAudioProgress(position);
+    emit outputPauseRequested(true);
+    emit playbackActivityChanged();
 }
 
 bool PlaybackController::skipMissingSong()

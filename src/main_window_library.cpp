@@ -185,6 +185,7 @@ void MainWindow::loadSongs(bool reloadLibrary)
     }
     m_songsTable->verticalScrollBar()->setValue(scrollPosition);
     m_songsTable->setUpdatesEnabled(true);
+    updateSongSelectionToolbar();
     updatePlayingIndicators();
     updateTaskbarToolbar();
 }
